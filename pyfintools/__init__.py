@@ -1,18 +1,43 @@
-import findatadownload.download_ts as fdts
-import findatadownload.download_meta as fdmeta
+""" Packages that provide generic tools and specific models for CMAs and SAAs.
+
+    The main sub-packages that appear in this package are:
+
+    **tools**: this package contains a number of generic tools that can be \ 
+        applied to a wide range of problems. Examples of the modules in \ 
+        this package are:
+            * optim: contains optimization methods
+            * freq: helps manipulate and extract time series frequency information
+            * excel: helps read from Excel workbooks
+            * factormodel: contains a generic factor model class
+            * fts: contains a library of common time series functions, as well as\ 
+                  providing an extension to pandas Series/DataFrame objects
+            * utils: contains a number of miscellaneous utility functions
+            * bond: contains functions for calculating the prices of a single \ 
+                  bond or portfolio of bonds
+            * equity: contains models for estimating equity prices\ 
+                  (e.g. Implied ERP)
+            * os: contains a miscellaneous functions involving the operating system
+            * sim: contains functions for performing simulations\ 
+                  (e.g. Monte-Carlo and bootstrap)
+            * stats: contains statistical functions such as regressions
+            * yieldcurve: contains functions/classes for working with yield\ 
+                  curves, and converting from spot to forward yields and vice versa
 
 
-def download_time_series(data_source, base_ticker, start=None, end=None,
-                         frequency=None, period=None, session=None):
-    """ Download data for a single base ticker (which may yield one or more time series).
+    **security**: this is a set of modules that provide simultaneous access to the \ 
+        meta and time series data for financial securities. It is often important to \ 
+        use the meta data (e.g. currency information, tenors, currency pairs for FX, \ 
+        credit ratings, etc.) at the same time as the time series are being used. \ 
+        Rather than have to keep track of all of this information in many different \ 
+        objects, it is much easier to have all of the relevant data stored in the \ 
+        same place.
+      
+    Other files:
+    
+    **constants**: defines constant parameters used throughout the codebase.
+   
+"""
 
-        Returns pandas DataFrame object with datetimes as the index and tickers as columns.
-    """
-    return fdts.download_time_series(data_source, base_ticker, start=start, end=end,
-                         frequency=frequency, period=period, session=session)
-
-
-def combine_symbol_lists(base_path):
-    """ Combine symbol lists from EODDATA into a single DataFrame.
-    """
-    return fdmeta.combine_symbol_lists(base_path)
+    ###############################################################################
+    ###########  This is the maximum length of a line - 79 characters  ############
+    ###############################################################################
