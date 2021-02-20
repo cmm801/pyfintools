@@ -1,5 +1,5 @@
 # secdb
-> A library containing useful functions for working with financial data and objects.
+A library containing useful functions for working with financial data and objects.
 
 # Meta
 

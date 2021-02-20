@@ -1,4 +1,4 @@
-""" Packages that provide generic tools and specific models for CMAs and SAAs.
+""" A package containing useful functions for working with financial data and objects.
 
     The main sub-packages that appear in this package are:
 
@@ -37,7 +37,6 @@
     **constants**: defines constant parameters used throughout the codebase.
    
 """
-
     ###############################################################################
     ###########  This is the maximum length of a line - 79 characters  ############
     ###############################################################################

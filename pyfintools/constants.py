@@ -1,5 +1,5 @@
 import os
-import pkg_resources
+#import pkg_resources
 import numpy as np
 
 ########################################################################
