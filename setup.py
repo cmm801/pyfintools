@@ -5,7 +5,7 @@ setup(
     version='0.1.0',
     author='Christopher Miller',
     author_email='cmm801@gmail.com',
-    packages=find_packages(include=['pyfintoos', 'pyfintoos.*']), 
+    packages=find_packages(include=['pyfintools', 'pyfintools.*']), 
     #include_package_data=True,
     scripts=[],
     url='http://pypi.python.org/pypi/pyfintools/',
