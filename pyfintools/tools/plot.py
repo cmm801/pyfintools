@@ -98,11 +98,11 @@ def plot_ts_2(ts, symbols_left, symbols_right, start=None, end=None,
 
     fig.show()
 
-def plot_candlestick(ts, open='open', high='high', low='low', 
-                         close='close', time='date'):
+def plot_candlestick(ts, open_col='open', high_col='high', low_col='low', 
+                         close_col='close', time_col='date'):
     """Plot an interactive candlestick chart for time series OCHL data.
     Arguments:
-    ts, open, high, low, close, time
+    ts, open_col, high_col, low_col, close_col, time_col
     
     Returns: None
     """
@@ -115,7 +115,7 @@ def plot_candlestick(ts, open='open', high='high', low='low',
     
     args = []
     # Add the column names, accounting for differences in case
-    cs_cols = [open, high, low, close]
+    cs_cols = [open_col, high_col, low_col, close_col]
     for j, col in enumerate(cs_cols):
         col_idx = find_column_index(ts, col)
         if col_idx == -1:
@@ -128,28 +128,30 @@ def plot_candlestick(ts, open='open', high='high', low='low',
     # Add the date/time information. 
     # Check if Date/time appears as a column in the DataFrame. 
     #   If not, then assume the index represents the date/time information.
-    time_idx = find_column_index(ts, time)
+    time_idx = -1 if time_col is None else find_column_index(ts, time_col)
     if time_idx == -1:
-        if not isinstance(ts.index.values[0], np.datetime64):
+        if not isinstance(ts.index, pd.DatetimeIndex):
             raise ValueError('Date/time info must be included as a column or else ' + \
                              'as an index with datetime entries.')
-        ts.index.name = time
-        ts = ts.reset_index()
-        time_idx = find_column_index(ts, time)
-    sub_ts = ts.iloc[:,time_idx]
-    args.append(sub_ts)
+        else:
+            args.append(ts.index)
+    else:
+        time_idx = find_column_index(ts, time_col)
+        args.append(ts.iloc[:,time_idx])
         
     fig = plotly.figure_factory.create_candlestick(*args)
     plotly.offline.plot(fig)
 
 
-def plot_candlestick_volume(ts, open='open', high='high', low='low', 
-                         close='close', time='date', volume='volume'):
-    """Plot an interactive candlestick chart for time series OHLC data.
-    Arguments:
-    ts, open, high, low, close, time, volume
-    
-    Returns: None
+def plot_candlestick_volume(ts, open_col='open', high_col='high', low_col='low', 
+                         close_col='close', time_col=None, vol_col='volume'):
+    """ Plot an interactive candlestick chart for time series OHLC data.
+        
+        Arguments:
+            ts, open_col, high_col, low_col, close_col, time_col, vol_col
+            If 'time_col' is None, then assume the time series Index has the date/time
+            
+        Returns: None
     """
     def find_column_index(ts, col):
         cols = [c.lower() for c in ts.columns]
@@ -160,7 +162,7 @@ def plot_candlestick_volume(ts, open='open', high='high', low='low',
     
     args = []
     # Add the column names, accounting for differences in case
-    cs_cols = [open, high, low, close]
+    cs_cols = [open_col, high_col, low_col, close_col]
     for j, col in enumerate(cs_cols):
         col_idx = find_column_index(ts, col)
         if col_idx == -1:
@@ -173,16 +175,16 @@ def plot_candlestick_volume(ts, open='open', high='high', low='low',
     # Add the date/time information. 
     # Check if Date/time appears as a column in the DataFrame. 
     #   If not, then assume the index represents the date/time information.
-    time_idx = find_column_index(ts, time)
+    time_idx = -1 if time_col is None else find_column_index(ts, time_col)
     if time_idx == -1:
-        if not isinstance(ts.index.values[0], np.datetime64):
+        if not isinstance(ts.index, pd.DatetimeIndex):
             raise ValueError('Date/time info must be included as a column or else ' + \
                              'as an index with datetime entries.')
-        ts.index.name = time
-        ts = ts.reset_index()
-        time_idx = find_column_index(ts, time)
-    sub_ts = ts.iloc[:,time_idx]
-    args.append(sub_ts)
+        else:
+            args.append(ts.index)
+    else:
+        time_idx = find_column_index(ts, time_col)
+        args.append(ts.iloc[:,time_idx])
         
     fig = make_subplots(
         rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.2
@@ -198,7 +200,7 @@ def plot_candlestick_volume(ts, open='open', high='high', low='low',
                         close=args[3]),
                   row=1, col=1)
 
-    vol_idx = find_column_index(ts, volume)
+    vol_idx = find_column_index(ts, vol_col)
     fig.add_trace(go.Bar(x=args[-1], y=ts.iloc[:,vol_idx]),
                   row=2, col=1)
 

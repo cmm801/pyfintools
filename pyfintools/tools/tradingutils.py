@@ -184,7 +184,7 @@ def downsample(input_df, frequency):
     seconds_per_bar = ibk.helper.TimeHelper(frequency, 'frequency').total_seconds()
     if 'volume' in col_names:
         input_df = input_df.iloc[input_df.volume.values > 0]
-        
+
     # We need to add a single repeated row at the beginning of the DataFrame
     #   which will make the algorithm more simple
     new_row = input_df.iloc[[0]].copy()
@@ -202,6 +202,8 @@ def downsample(input_df, frequency):
     t_start = t_end = 1
     bar_start_time = int(input_df.index.values[0] / seconds_per_bar) * seconds_per_bar
 
+    barcount_col = _get_barcount_col(input_df)
+
     time_bars = []
     while bar_start_time < df.index.values[-1]:
         bar_end_time = min(bar_start_time + seconds_per_bar, df.index.values[-1] + 1)        
@@ -215,8 +217,8 @@ def downsample(input_df, frequency):
                    low=df.low.values[t_start:t_end].min(),
                    close=df.close.values[t_end-1])
 
-        if 'barCount' in col_names:
-            bar['barCount'] = df.barCount.values[t_start:t_end].sum()
+        if barcount_col is not None:
+            bar[barcount_col] = df[barcount_col].values[t_start:t_end].sum()
         if 'volume' in col_names:
             bar['volume'] = int(expanding_vol.values[t_end - 1] - expanding_vol.values[t_start - 1])
         if 'average' in col_names:
@@ -261,12 +263,28 @@ def set_timestamp_index(df):
 def add_missing_rows(_df, t_start, t_end):
     """Add missing rows between t_start and t_end to a data frame.
     """
+    barcount_col = _get_barcount_col(_df)
+
     ind_vals = np.arange(t_start, t_end + 1)
     N = ind_vals.size - _df.shape[0]
     missing_idx = set(ind_vals) - set(_df.index.values)
     empty_df = pd.DataFrame(np.nan * np.zeros((N, _df.shape[1]), dtype=np.float32), columns=_df.columns)
     empty_df['volume'] = 0
-    empty_df['barCount'] = 0
+    
+    if barcount_col is not None:
+        empty_df['barCount'] = 0
+
     empty_df.index = pd.Index(missing_idx)
     full_df = pd.concat([_df, empty_df]).sort_index().ffill()
     return full_df
+
+def _get_barcount_col(df):        
+    """ Find a bar-count columns. """
+    barcount_col = None
+    if 'bar_count' in df.columns:
+        barcount_col = 'bar_count'
+    elif 'barCount' in df.columns:
+        barcount_col = 'barCount'
+    return barcount_col
+
+    
