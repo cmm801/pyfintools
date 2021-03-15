@@ -740,6 +740,21 @@ def calculate_prominence(helper, x_obs, y, step_size, atol=None):
     
     return prominence
 
+def get_line_region_classification(helper, idx_obs, y, band_width, atol=None):
+    """Determine if the prices are in the region near the line. """
+    if atol is None:
+        atol = DEFAULT_ABS_TOL
+
+    mask_below_inner_region = helper.ohlc.high.values[:idx_obs+1] < y - band_width - atol
+    mask_above_inner_region = helper.ohlc.low.values[:idx_obs+1] > y + band_width + atol
+    mask_in_inner_region = ~mask_below_inner_region & ~mask_above_inner_region
+    
+    # Create array of -1, 0, +1 to indicate if prices are below, in, or above the line neighborhood
+    all_line_class = np.zeros((idx_obs+1,), dtype=int)
+    all_line_class[mask_below_inner_region] = -1
+    all_line_class[mask_above_inner_region] = +1
+    return all_line_class
+
 def find_right_boundaries(helper, x_obs, y, band_width, min_time_for_breach=10, atol=None):
     """ Find the index of the boundaries separating regions where prices are above/below the line.
     
@@ -764,32 +779,30 @@ def find_right_boundaries(helper, x_obs, y, band_width, min_time_for_breach=10, 
     idx_obs = np.where(helper.ohlc.index == x_obs)[0][0]
     index = np.arange(0, idx_obs + 1)
 
-    low_vals = helper.ohlc.low.values
-    high_vals = helper.ohlc.high.values
-    low_obs = low_vals[idx_obs]
-    high_obs = high_vals[idx_obs]
-
-    # Find the locations where the prices are away from the horizontal line
-    mask_below_inner_region = high_vals[:idx_obs+1] < y - band_width - atol
-    mask_above_inner_region = low_vals[:idx_obs+1] > y + band_width + atol
-    mask_in_inner_region = ~mask_below_inner_region & ~mask_above_inner_region
-    idx_outside_inner_region = index[~mask_in_inner_region]
+    # Determine if the prices are in the region near the line
+    all_line_class = get_line_region_classification(helper, 
+            idx_obs=idx_obs, y=y, band_width=band_width, atol=atol)
+    
+    idx_outside_inner_region = index[all_line_class != 0]
     idx_first = idx_outside_inner_region.min()
 
-    # Create array of -1, 0, +1 to indicate if prices are below, in, or above the line neighborhood
-    all_line_class = np.zeros((idx_obs+1,), dtype=int)
-    all_line_class[mask_below_inner_region] = -1
-    all_line_class[mask_above_inner_region] = +1
-
     # Find the right-hand index of every region where the line class changes
-    all_idx_rb = index[np.hstack([all_line_class[1:] != all_line_class[:-1], False])]
+    all_idx_rb = index[np.hstack([all_line_class[1:] != all_line_class[:-1], True])]
     all_separation = np.hstack([all_idx_rb[0], all_idx_rb[1:] - all_idx_rb[:-1]])
 
     # Find the right-hand index of regions that are bigger than the min. allowable size
     idx_rb = all_idx_rb[all_separation >= min_time_for_breach]
-    
-    # Only keep regions where prices are either above ore below the line
-    idx_right_boundaries = idx_rb[all_line_class[idx_rb] != 0]
+
+    # Only keep boundaries where the class changes
+    idx_right_boundaries_rev = []
+    for k, idx_curr in enumerate(idx_rb[::-1]):
+        dir_curr = all_line_class[idx_curr]
+        if k == 0 or dir_last != dir_curr:
+            idx_right_boundaries_rev.append(idx_curr)
+            idx_last = idx_curr
+            dir_last = dir_curr
+
+    idx_right_boundaries = np.array(idx_right_boundaries_rev[::-1], dtype=int)
     bounding_direction = all_line_class[idx_right_boundaries]
     return idx_right_boundaries, bounding_direction
 
@@ -831,45 +844,88 @@ def calculate_features_for_horizontal_line(helper, x_obs, y, band_width,
             min_time_for_breach: (float) Number of seconds required before a breach is declared
             atol: (float) the absolute tolerance for floating point operations/comparisons
     """
+    if atol is None:
+        atol = DEFAULT_ABS_TOL
+
     idx_right_boundaries, bounding_direction = find_right_boundaries(helper, x_obs=x_obs, y=y, 
                      band_width=band_width, min_time_for_breach=min_time_for_breach, atol=atol)
 
+    idx_obs = np.where(helper.ohlc.index == x_obs)[0][0]
+    low_vals = helper.ohlc.low.values[:idx_obs+1]    
+    high_vals = helper.ohlc.high.values[:idx_obs+1]
+
+    # Only keep boundaries between regions with prices above or below line
+    idx_right_boundaries = idx_right_boundaries[bounding_direction != 0]
+    bounding_direction = bounding_direction[bounding_direction != 0]
+
     # Find the index at the right side of each region, and whether 
     #   a deflection or intersection occurred
-    idx_deflections = idx_right_boundaries[:-1][bounding_direction[1:] == bounding_direction[:-1]]
-    idx_intersections = idx_right_boundaries[:-1][bounding_direction[1:] != bounding_direction[:-1]]
+    idx_bdry = bounding_direction[1:] != bounding_direction[:-1]
+    idx_deflections = idx_right_boundaries[:-1][~idx_bdry]
+    idx_intersections = idx_right_boundaries[:-1][idx_bdry]
+
+    # Get the direction in each of the major regions
+    regional_directions = bounding_direction[:-1][idx_bdry]
+    finished = False
+    p = 1
+    while not finished:
+        if bounding_direction[-p] != 0:
+            regional_directions = np.hstack([regional_directions,
+                                             bounding_direction[-p]])
+            finished = True
+        p += 1
 
     # Add the first index to the list of regional separators, because the number of
     # distinct regions should be 1 more than the number of intersections
-    idx_regions = np.hstack([0, idx_intersections])
+    idx_left_major_boundaries = np.hstack([0, 1 + idx_intersections])
+
+    # Determine if the prices are in the region near the line
+    all_line_class = get_line_region_classification(helper, 
+            idx_obs=idx_obs, y=y, band_width=band_width, atol=atol)
 
     # Go through the intersection points in reverse order, starting at x_obs
     j = 0
-    x_intersections = pd.NaT * np.empty((max_intersections + 1,))
     n_deflections = -1 * np.ones((max_intersections + 1,), dtype=int)
-    directions = np.zeros((max_intersections + 1,), dtype=int)
+    directions = -1 * np.ones((max_intersections + 1,), dtype=int)
     n_neighbors = -1 * np.ones((max_intersections + 1,), dtype=int)
-    idx_right = idx_obs + 1
-    while j < min(1 + max_intersections, idx_regions.size):
-
-        # Find the left boundary of the current region
-        idx_left = idx_regions[-j-1]
+    n_violations = -1 * np.ones((max_intersections + 1,), dtype=int)
+    violations_sum_1 = np.nan * np.empty((max_intersections + 1,), dtype=float)
+    violations_sum_2 = np.nan * np.empty((max_intersections + 1,), dtype=float)
+    x_right = pd.NaT * np.empty((max_intersections + 1,))
+    x_left = pd.NaT * np.empty((max_intersections + 1,))
+    durations = -1 * np.ones((max_intersections + 1,), dtype=int)
+    idx_right = idx_obs
+    for j, idx_left in enumerate(idx_left_major_boundaries[::-1]):
+        if j >= max_intersections:
+            break
 
         # Find the number of deflections/intersections between the left/right boundaries
-        mask_bdry = (idx_left < idx_right_boundaries) & (idx_right_boundaries < idx_right)
+        mask_bdry = (idx_left <= idx_right_boundaries) & (idx_right_boundaries < idx_right)
         n_deflections[j] = mask_bdry.sum()
-        x_intersections[j] = helper.ohlc.index[idx_left]
-
-        # Find whether the line is above or below this region
-        directions[j] = int(bounding_direction[j])
-        #if j > 0:
-        #    assert bounding_direction[j] != bounding_direction[j-1]
+        directions[j] = regional_directions[-j-1]
+        durations[j] = idx_right - idx_left + 1
+        x_left[j] = helper.ohlc.index[idx_left]
+        x_right[j] = helper.ohlc.index[idx_right]
 
         # Find the number of points in the neighborhood of the line btwn left/right boundaries
         mask_full = (idx_left < idx_right_boundaries) & (idx_right_boundaries < idx_right)
-        n_neighbors[j] = mask_in_inner_region[(idx_left < index) & (index < idx_right)].sum()
+        idx_region = (idx_left < index) & (index < idx_right)
+        n_neighbors[j] = (0 == all_line_class[idx_region]).sum()
 
-        idx_right = idx_left
+        if directions[j] == 1:
+            idx_v = low_vals[idx_region] <= y - atol
+            vals = np.abs(low_vals[idx_region][idx_v] - y)
+        elif directions[j] == -1:
+            idx_v = high_vals[idx_region] >= y + atol
+            vals = np.abs(high_vals[idx_region][idx_v] - y)
+        else:
+            raise ValueError('Direction should be +1 or -1')
+
+        n_violations[j] = np.sum(idx_v)
+        violations_sum_1[j] = vals.sum() / band_width
+        violations_sum_2[j] = np.power(vals, 2).sum() / np.power(band_width, 2)
+            
+        idx_right = idx_left - 1
         j += 1
 
     # Find the maximum prominence of the line
@@ -881,9 +937,15 @@ def calculate_features_for_horizontal_line(helper, x_obs, y, band_width,
                    x_R=x_obs, y_R=y, 
                    prominence=prominence,
                    directions=directions,
-                   x_intersections=x_intersections,
                    n_neighbors=n_neighbors,
-                   n_deflections=n_deflections)
+                   n_deflections=n_deflections,
+                   n_violations=n_violations,
+                   violations_sum_1=violations_sum_1,
+                   violations_sum_2=violations_sum_2,
+                   durations=durations,
+                   x_left=x_left,
+                   x_right=x_right,                   
+                  )
 
     return results
 
@@ -928,3 +990,40 @@ def find_all_support_and_resistence_lines(helper, x_obs, step_size, band_width,
     # Combine the results into a DataFrame
     df_hlines = pd.DataFrame.from_dict(hlines)
     return df_hlines
+
+def calculate_line_feature_score(helper, df_features, x_obs, max_intersections):
+    """ Calculate a score for a support/resistance line based on features.
+    """
+    T = (x_obs - helper.ohlc.index[0]) / pd.Timedelta(seconds=1)
+
+    scores = []
+    x_scores = []
+    for j in range(df_features.shape[0]):
+        row = df_features.iloc[j]
+        max_score = -1
+        max_score_x = helper.ohlc.index[0]
+        for k in range(1, max_intersections + 1):
+            if row.n_neighbors[k-1] > -1 and row.directions[k-1] != 0:       
+                n_deflections = row.n_deflections[:k]            
+                n_neighbors = row.n_neighbors[:k]
+                n_violations = row.n_violations[:k]
+                violations_sum_1 = row.violations_sum_1[:k]
+                violations_sum_2 = row.violations_sum_2[:k]            
+                durations = row.durations[:k]
+
+                value = np.sqrt(durations/T) \
+                        * (1 + n_deflections / T) \
+                        / (1 + 2 * violations_sum_2) \
+                        * (1 + n_neighbors)       
+                score = np.power(np.product(value), 1/k)
+                if score > max_score:
+                    max_score = score
+                    max_score_x = row.x_left[k-1]
+
+        scores.append(max_score)
+        x_scores.append(max_score_x)
+
+    df = df_features.copy()
+    df['score'] = scores
+    df['score_x'] = x_scores
+    return df
