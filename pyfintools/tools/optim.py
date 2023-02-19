@@ -25,21 +25,21 @@ import scipy.linalg
 import scipy.optimize    
 from collections import defaultdict
 
-import secdb.constants
-import secdb.tools.risk
-import secdb.tools.utils
+import pyfintools.constants
+import pyfintools.tools.risk
+import pyfintools.tools.utils
 
 
 def optimize(method, **kwargs):
-    if secdb.constants.METHOD_MEAN_VARIANCE == method:
+    if pyfintools.constants.METHOD_MEAN_VARIANCE == method:
         return optimize_mean_variance(**kwargs)
-    elif secdb.constants.METHOD_MIN_VARIANCE == method:
+    elif pyfintools.constants.METHOD_MIN_VARIANCE == method:
         return optimize_min_variance(**kwargs)    
-    elif secdb.constants.METHOD_CVAR == method:
+    elif pyfintools.constants.METHOD_CVAR == method:
         return optimize_cvar(**kwargs)
-    elif secdb.constants.METHOD_ROBUST == method:
+    elif pyfintools.constants.METHOD_ROBUST == method:
         return optimize_robust(**kwargs)
-    elif secdb.constants.METHOD_ROBUST_ERC == method:
+    elif pyfintools.constants.METHOD_ROBUST_ERC == method:
         return optimize_robust_erc(**kwargs)    
     else:
         raise ValueError(f'Unsupported optimization method: {method}')
@@ -203,14 +203,14 @@ def optimize_robust_erc(vol_target, mu, asset_cov, unc_cov, kappa, lb=None, ub=N
 
     # Define the objective function (to minimize the variance of the individual contributions to risk)
     if risk_measure in ('entropy'):
-        min_fun = lambda x : -secdb.tools.risk.calc_risk(asset_cov, x, method=risk_method, risk_measure=risk_measure)
+        min_fun = lambda x : -pyfintools.tools.risk.calc_risk(asset_cov, x, method=risk_method, risk_measure=risk_measure)
     elif risk_measure in ('var', 'hh'):
-        min_fun = lambda x : secdb.tools.risk.calc_risk(asset_cov, x, method=risk_method, risk_measure=risk_measure)
+        min_fun = lambda x : pyfintools.tools.risk.calc_risk(asset_cov, x, method=risk_method, risk_measure=risk_measure)
     else:
         raise ValueError(f'Unsupported risk measure: {risk_measure}')
     
     # Define the uncertaint constraint
-    unc_fun = lambda x, x_meanvar : secdb.tools.risk.calc_normalized_uncertainty(mu, unc_cov, x, x_meanvar)
+    unc_fun = lambda x, x_meanvar : pyfintools.tools.risk.calc_normalized_uncertainty(mu, unc_cov, x, x_meanvar)
     unc_constr = scipy.optimize.NonlinearConstraint(lambda x : unc_fun(x, x_mv), lb=-kappa, ub=kappa)
     
     # Get the full list of constraints
@@ -362,7 +362,7 @@ def _remove_parentheses(string):
     while idx_start is not None:
         # Create a temporary random symbol as a placeholder for the expression
         expression = string[idx_start+1:idx_end]        
-        random_symbol = secdb.tools.utils.generate_random_string(10)
+        random_symbol = pyfintools.tools.utils.generate_random_string(10)
         placeholders[random_symbol] = expression
 
         # Replace the expression with the temporary random symbol

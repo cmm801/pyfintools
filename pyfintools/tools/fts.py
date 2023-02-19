@@ -24,8 +24,8 @@
 import pandas as pd
 import numpy as np
 
-import secdb.tools.freq
-import secdb.tools.stats
+import pyfintools.tools.freq
+import pyfintools.tools.stats
 
 
 UNSMOOTH_METHOD_GELTNER = 'geltner'
@@ -76,11 +76,11 @@ class PerformanceAccessor(object):
     
     @property
     def frequency(self):
-        return secdb.tools.freq.infer_freq(self._obj.index, allow_missing=True)
+        return pyfintools.tools.freq.infer_freq(self._obj.index, allow_missing=True)
     
     @property
     def n_periods_per_year(self):
-        return secdb.tools.freq.get_periods_per_year(self.frequency)
+        return pyfintools.tools.freq.get_periods_per_year(self.frequency)
     
     @property
     def n_years(self):
@@ -279,9 +279,9 @@ def _get_max_drawdown_summary_stats_single(mdd_ts):
 
     # Find the duration of the draw-down
     if idx_end is not None:
-        duration = secdb.tools.freq.get_years_between_dates(idx_start, idx_end)
+        duration = pyfintools.tools.freq.get_years_between_dates(idx_start, idx_end)
     else:
-        duration = secdb.tools.freq.get_years_between_dates(idx_start, mdd_ts.index[-1])
+        duration = pyfintools.tools.freq.get_years_between_dates(idx_start, mdd_ts.index[-1])
 
     # Summarize the results
     output_ts = pd.Series(dict(value=mdd_val,
@@ -294,7 +294,7 @@ def _get_max_drawdown_summary_stats_single(mdd_ts):
 
 def get_num_years(ts):
     T = ts.index.values[-1] - ts.index.values[0]
-    return np.timedelta64(T, 's') / np.timedelta64(1, 's') / secdb.tools.freq.SECONDS_PER_YEAR
+    return np.timedelta64(T, 's') / np.timedelta64(1, 's') / pyfintools.tools.freq.SECONDS_PER_YEAR
 
 def _vol_generic(filter_type, ts, stype, sampling_freq=DEFAULT_SAMPLING_FREQUENCY, use_log_rtns=True, skipna=True):
     if use_log_rtns:
@@ -302,7 +302,7 @@ def _vol_generic(filter_type, ts, stype, sampling_freq=DEFAULT_SAMPLING_FREQUENC
     else:
         rtns = convert_ts_type(ts, orig_type=stype, target_type=TS_TYPE_SIMPLE_RETURNS, sampling_freq=sampling_freq)
 
-    periods_per_year = secdb.tools.freq.get_periods_per_year(sampling_freq)
+    periods_per_year = pyfintools.tools.freq.get_periods_per_year(sampling_freq)
     rtn_vals = rtns.values    
     if isinstance(rtns, pd.Series):
         rtn_vals = rtn_vals[:,np.newaxis]
@@ -364,7 +364,7 @@ def VaR(ts, q, stype, sampling_freq=DEFAULT_SAMPLING_FREQUENCY, horizon='12M'):
     levels = convert_ts_type(ts, orig_type=stype, target_type=TS_TYPE_LEVELS)
     
     # Calculate the number of periods in the measurement horizon, and then get rolling returns
-    window = secdb.tools.freq.extract_window_size(horizon, levels)    
+    window = pyfintools.tools.freq.extract_window_size(horizon, levels)    
     rolling_returns = -1 + levels / levels.shift(window)
     
     df = rolling_returns.quantile(q)
@@ -381,7 +381,7 @@ def CVaR(ts, q, stype, sampling_freq=DEFAULT_SAMPLING_FREQUENCY, horizon='12M'):
     _var = VaR(levels, q=q, stype=TS_TYPE_LEVELS, sampling_freq=sampling_freq, horizon=horizon)
 
     # Calculate the number of periods in the measurement horizon, and then get rolling returns
-    window = secdb.tools.freq.extract_window_size(horizon, levels)
+    window = pyfintools.tools.freq.extract_window_size(horizon, levels)
     rolling_returns = -1 + levels / levels.shift(window)
     
     # Get a matrix of the return values
@@ -425,7 +425,7 @@ def cum_return(ts, stype, skipna=True):
     
 def ann_return(ts, stype, sampling_freq=DEFAULT_SAMPLING_FREQUENCY, mean_type=GEOMETRIC_MEAN, skipna=True):
     samp_ts = convert_ts_type(ts, orig_type=stype, target_type=TS_TYPE_LEVELS, sampling_freq=sampling_freq)
-    periods_per_year = secdb.tools.freq.get_periods_per_year(sampling_freq)
+    periods_per_year = pyfintools.tools.freq.get_periods_per_year(sampling_freq)
     if isinstance(samp_ts, pd.Series):
         cols = [samp_ts.name]
         samp_ts = pd.DataFrame(samp_ts)
@@ -503,7 +503,7 @@ def sharpe_ratio(tr, cash_tr, stype, sampling_freq=DEFAULT_SAMPLING_FREQUENCY):
     return df
 
 def convert_ts_type(ts, orig_type, target_type, sampling_freq=None):
-    inferred_freq = secdb.tools.freq.infer_freq(ts.index, allow_missing=True)
+    inferred_freq = pyfintools.tools.freq.infer_freq(ts.index, allow_missing=True)
     if orig_type == target_type and (sampling_freq is None or sampling_freq == inferred_freq):
         new_ts = ts
     elif orig_type == TS_TYPE_LEVELS:
@@ -756,7 +756,7 @@ def get_fundamental_frequencies(ts, stype=None):
                 idx = sub_ts.index[good_rows]
 
             # Add the inferred frequency to the list
-            f = secdb.tools.freq.infer_freq(idx, allow_missing=True)
+            f = pyfintools.tools.freq.infer_freq(idx, allow_missing=True)
             frequencies.append(f)
 
     return frequencies
@@ -787,12 +787,12 @@ def unsmooth_returns_numpy(ts, stype, method, skipna=True, window=None, max_beta
 
     # Get a numpy array of unsmoothed returns
     if method == UNSMOOTH_METHOD_GELTNER:
-        uns_rtn_mtx = secdb.tools.stats.geltner_unsmooth(rtns.to_numpy(), skipna=skipna)
+        uns_rtn_mtx = pyfintools.tools.stats.geltner_unsmooth(rtns.to_numpy(), skipna=skipna)
     elif method == UNSMOOTH_METHOD_GELTNER_ROLLING:
         if window is None:
             raise ValueError('The "window" argument must be specified to use Geltner rolling unsmoothing.')
         else:
-            uns_rtn_mtx = secdb.tools.stats.geltner_unsmooth_rolling(rtns.to_numpy(), window, skipna=skipna,
+            uns_rtn_mtx = pyfintools.tools.stats.geltner_unsmooth_rolling(rtns.to_numpy(), window, skipna=skipna,
                                                                      max_beta=max_beta, smoothing=smoothing)
     else:
         raise ValueError('Unsupported Geltner unsmoothing method.')

@@ -32,11 +32,11 @@ import numpy as np
 import pandas as pd
 from collections import Iterable
 
-import secdb.tools.freq
-import secdb.security.helper
+import pyfintools.tools.freq
+import pyfintools.security.helper
 
-from secdb.constants import NUMERIC_DATA_TYPES
-from secdb.security.constants import TENOR_SPOT, DEFAULT_FX_HEDGING_FREQUENCY, DEFAULT_CROSS_CURRENCY
+from pyfintools.constants import NUMERIC_DATA_TYPES
+from pyfintools.security.constants import TENOR_SPOT, DEFAULT_FX_HEDGING_FREQUENCY, DEFAULT_CROSS_CURRENCY
 
 class Panel(object):
     """ A class that offers unified access to time series and meta data for a list of securities.
@@ -157,7 +157,7 @@ class Panel(object):
         if not self.object_list:
             ts, meta = pd.DataFrame(), pd.DataFrame()
         else:
-            ts, meta = secdb.security.helper.get_ts_and_meta(tickers=self.get_tickers(series_type_codes),
+            ts, meta = pyfintools.security.helper.get_ts_and_meta(tickers=self.get_tickers(series_type_codes),
                                                              ts_dbs=self.get_ts_dbs(series_type_codes),
                                                              security_info=self.security_info, 
                                                              ticker_info=self.ticker_info, 
@@ -168,7 +168,7 @@ class Panel(object):
                                                              backfill=backfill)
 
         # Construct the time series object
-        class_handle = secdb.security.helper.get_module_equivalent_class_handle(self, 'panel', 'timeseries')
+        class_handle = pyfintools.security.helper.get_module_equivalent_class_handle(self, 'panel', 'timeseries')
         return class_handle(ts, meta)
     
     def has_time_series(self, series_type_code):
@@ -829,11 +829,11 @@ class FX(Rates):
                 Security TimeSeries object, with columns dual-indexed by the target currency pairs AND the target tenors.
         """
         # Get the correctly formatted tenor and currency pair information from the input arguments
-        target_ccy_pairs, target_tenors = secdb.security.helper.format_ccy_pair_and_tenor_info(
+        target_ccy_pairs, target_tenors = pyfintools.security.helper.format_ccy_pair_and_tenor_info(
                                                                 target_ccy_pairs, target_tenors)
 
         # Create an instance of the FXHelper to assist with exchange rate construction
-        fx_helper = secdb.security.helper.FXHelper(base_currency=self.base_currency,
+        fx_helper = pyfintools.security.helper.FXHelper(base_currency=self.base_currency,
                                                    quote_currency=self.quote_currency,
                                                    labels=self.sec_code,
                                                    tenor=self.tenor,
@@ -865,10 +865,10 @@ class FX(Rates):
         target_ccy_pairs = [f'{bc}/{to_currency}' for bc in asset_ts.denominated_currency]
 
         # Include all tenors with frequencies higher than the hedging_frequency
-        target_freq = secdb.tools.freq.get_periods_per_year(hedging_frequency)
+        target_freq = pyfintools.tools.freq.get_periods_per_year(hedging_frequency)
         target_tenors = []
         for tnr in set(self.tenor):
-            if secdb.tools.freq.get_periods_per_year(tnr) >= target_freq:
+            if pyfintools.tools.freq.get_periods_per_year(tnr) >= target_freq:
                 target_tenors.append(tnr)
 
         # Get the FX rates needed for currency conversion
@@ -916,7 +916,7 @@ class FX(Rates):
             required_fwd_tenors = [roll_frequency]
 
         # Get the required currency pairs
-        currency_pairs = secdb.security.helper.get_currency_pairs_from_inputs(long_currency, short_currency)
+        currency_pairs = pyfintools.security.helper.get_currency_pairs_from_inputs(long_currency, short_currency)
         
         # Get the spot rates
         spot_rates = self.get_fx_rates(series_type_code, target_ccy_pairs=currency_pairs,
@@ -959,7 +959,7 @@ def from_metadata(security_info, ticker_info, ts_db=None, allow_duplicates=None)
     for sec_code in uniq_sec_codes:
         sec_info = security_info.query(f"sec_code == '{sec_code}'")
         tkr_info = ticker_info.query(f"sec_code == '{sec_code}'")        
-        sec = secdb.security.helper.get_security(sec_info, tkr_info, ts_db=ts_db)
+        sec = pyfintools.security.helper.get_security(sec_info, tkr_info, ts_db=ts_db)
         object_list.append(sec)
     return from_securities(object_list, allow_duplicates=allow_duplicates)
 
@@ -968,7 +968,7 @@ def from_securities(object_list, allow_duplicates=None):
     # Get the category codes for the security objects
     cat_1_codes = [obj.category_1_code for obj in object_list]
     cat_2_codes = [obj.category_2_code for obj in object_list]
-    class_name = secdb.security.helper.get_security_panel_name(cat_1_codes, cat_2_codes, 
+    class_name = pyfintools.security.helper.get_security_panel_name(cat_1_codes, cat_2_codes, 
                                                                default_class_name='Panel')
     class_handle = eval(class_name)    
     return class_handle(object_list=object_list, allow_duplicates=allow_duplicates)

@@ -8,8 +8,8 @@ import numpy as np
 import pandas as pd
 from abc import ABC, abstractmethod
 
-import secdb.constants
-import secdb.tools.freq
+import pyfintools.constants
+import pyfintools.tools.freq
 
 
 class ZeroCurveAbstract(object):
@@ -20,10 +20,10 @@ class ZeroCurveAbstract(object):
         raise NotImplementedError('Needs to be implemented by subclass')
 
     def calc_discounted_value(self, pricing_date, cashflows, n_years):
-        if not isinstance(cashflows, secdb.constants.NUMERIC_DATA_TYPES):
+        if not isinstance(cashflows, pyfintools.constants.NUMERIC_DATA_TYPES):
             cashflows = np.array(cashflows, dtype=float)
 
-        if not isinstance(n_years, secdb.constants.NUMERIC_DATA_TYPES):
+        if not isinstance(n_years, pyfintools.constants.NUMERIC_DATA_TYPES):
             n_years = np.array(n_years, dtype=float)
 
         zero_rates = self._get_zero_rates(pricing_date, n_years)
@@ -72,11 +72,11 @@ class AbstractBond(object):
 
     def calc_convexity(self, pricing_date):
         cf = self.get_cashflows(pricing_date)        
-        years_to_maturity = secdb.tools.freq.get_years_between_dates(pricing_date, cf.index)
+        years_to_maturity = pyfintools.tools.freq.get_years_between_dates(pricing_date, cf.index)
         return (np.power(years_to_maturity, 2) * cf.values).sum() / cf.values.sum()
         
     def calc_duration_mod(self, pricing_date, zero_yield_obj, use_ytm=False, 
-                          compounding_freq=secdb.constants.CONTINUOUS_COMPOUNDING, verbose=False):
+                          compounding_freq=pyfintools.constants.CONTINUOUS_COMPOUNDING, verbose=False):
         """ Calculate the modified duration.
             The modified duration is the linear sensitivity of the bond price to small changes
             in the yield-to-maturity. The formula is D_mod = D_macauley / (1 + Y_YTM)
@@ -91,11 +91,11 @@ class AbstractBond(object):
             We use the zero curve to discount the cash flows.
         """
         cf = self.get_cashflows(pricing_date)
-        years_to_maturity = secdb.tools.freq.get_years_between_dates(pricing_date, cf.index)
+        years_to_maturity = pyfintools.tools.freq.get_years_between_dates(pricing_date, cf.index)
         
         if cf.size == 1:
             # For zero coupon bonds, the duration is just the time to the final payout
-            return secdb.tools.freq.get_years_between_dates(pricing_date, cf.index[0])
+            return pyfintools.tools.freq.get_years_between_dates(pricing_date, cf.index[0])
         else:
             if use_ytm:
                 YTM = self.calc_YTM(pricing_date, zero_yield_obj)
@@ -107,13 +107,13 @@ class AbstractBond(object):
             time_wtd_vals = years_to_maturity * discounted_vals
             return np.sum(time_wtd_vals) / np.sum(discounted_vals)            
 
-    def calc_YTM(self, pricing_date, zero_yield_obj, verbose=False, compounding_freq=secdb.constants.CONTINUOUS_COMPOUNDING):
+    def calc_YTM(self, pricing_date, zero_yield_obj, verbose=False, compounding_freq=pyfintools.constants.CONTINUOUS_COMPOUNDING):
         cashflows = self.get_cashflows(pricing_date)
         prc = self.calc_price(pricing_date, zero_yield_obj)
-        n_years_to_mty = secdb.tools.freq.get_years_between_dates(pricing_date, cashflows.index)
+        n_years_to_mty = pyfintools.tools.freq.get_years_between_dates(pricing_date, cashflows.index)
 
         def min_fun(YTM):
-            if compounding_freq == secdb.constants.CONTINUOUS_COMPOUNDING:
+            if compounding_freq == pyfintools.constants.CONTINUOUS_COMPOUNDING:
                 D = np.exp(-YTM * n_years_to_mty)
             elif isinstance(compounding_freq, int):
                 D = 1 / np.power(1 + YTM/compounding_freq, compounding_freq * n_years_to_mty)
@@ -226,7 +226,7 @@ class Bond(AbstractBond):
     
     @notional.setter
     def notional(self, val):
-        if not isinstance(val, secdb.constants.NUMERIC_DATA_TYPES):
+        if not isinstance(val, pyfintools.constants.NUMERIC_DATA_TYPES):
             raise ValueError('Notional must be a float or integer value.')
         else:
             self._notional = val
@@ -249,8 +249,8 @@ class Bond(AbstractBond):
                     raise ValueError('Error in obtaining the previous coupon payment date.')
 
             # Find the number of years between the previous and next coupon payments
-            years_from_prev_payment = secdb.tools.freq.get_years_between_dates(prev_payment_date, pricing_date)
-            years_to_next_payment = secdb.tools.freq.get_years_between_dates(pricing_date, next_payment_date)
+            years_from_prev_payment = pyfintools.tools.freq.get_years_between_dates(prev_payment_date, pricing_date)
+            years_to_next_payment = pyfintools.tools.freq.get_years_between_dates(pricing_date, next_payment_date)
             
             # Calculate the discounted value of the future coupon payment
             disc_val_of_next_cashflow = float(zero_yield_obj.calc_discounted_value(pricing_date, next_payment_amt,
@@ -384,6 +384,6 @@ def calc_price_from_cashflows(cf_amounts, cf_dates, pricing_date, zero_yield_obj
           pricing_date: the date on which the price is to be calculated
           zero_yield_obj: either a YieldCurve object representing zero yields, or a float representing the YTM
           """
-    years_to_maturity = secdb.tools.freq.get_years_between_dates(pricing_date, cf_dates)
+    years_to_maturity = pyfintools.tools.freq.get_years_between_dates(pricing_date, cf_dates)
     discounted_vals = zero_yield_obj.calc_discounted_value(pricing_date, cf_amounts, years_to_maturity)
     return np.sum(discounted_vals)

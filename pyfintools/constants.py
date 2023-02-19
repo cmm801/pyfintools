@@ -12,7 +12,7 @@ DATA_PATH = '/Users/chris/OneDrive/programming/projects/finance/secdata'
 NUMERIC_DATA_TYPES = (int, np.int64, float, np.float32, np.float64)
 
 # Tuple of boolean data types
-BOOLEAN_DATA_TYPES = (bool, np.bool, np.bool_)
+BOOLEAN_DATA_TYPES = (bool)
 
 # Compounding frequencies are usually an integer number of times per year
 # Rather than use 'infinity' (np.inf) to represent continuous compounding, we instead use -1

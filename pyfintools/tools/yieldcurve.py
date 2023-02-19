@@ -12,8 +12,8 @@ import pandas as pd
 import scipy.interpolate
 import matplotlib.pyplot as plt
 
-import secdb.constants
-import secdb.tools.freq
+import pyfintools.constants
+import pyfintools.tools.freq
 
 
 class IRCurve(object):
@@ -103,7 +103,7 @@ class IRCurve(object):
         return np.isclose(0, np.abs(np.round(val, 0) - val), atol=1e-6)    
 
     def _interpolate(self, target_tenors):
-        if isinstance(target_tenors, secdb.constants.NUMERIC_DATA_TYPES):
+        if isinstance(target_tenors, pyfintools.constants.NUMERIC_DATA_TYPES):
             target_tenors = np.array([target_tenors], dtype=float)
         else:
             target_tenors = np.array(target_tenors, dtype=float)
@@ -183,7 +183,7 @@ class ForwardCurve(IRCurve):
 
     def get_implied_path(self, data_frequency='Y', adjust_for_convexity=False, yield_exp_vols=None):
         # Get the range of tenors based on the data frequency
-        T = 1/secdb.tools.freq.get_periods_per_year(data_frequency)
+        T = 1/pyfintools.tools.freq.get_periods_per_year(data_frequency)
         max_tenor = self.tenor_in_years.max()
         target_tenors = np.arange(T, max_tenor + T/2, T)
         
