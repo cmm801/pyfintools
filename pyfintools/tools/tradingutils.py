@@ -115,11 +115,13 @@ def create_volume_bars(input_df, bar_size, min_bar_size=0):
        """    
     # We need to add a single repeated row at the beginning of the DataFrame
     #   which will make the algorithm more simple
+    BARCOUNT_COL = 'barCount' if 'barCount' in input_df.columns else 'bar_count'
+
     new_row = input_df.iloc[[0]].copy()
     new_row.loc[:,'volume'] = 0
-    new_row.loc[:,'barCount'] = 0
-    new_date = pd.DatetimeIndex(input_df.iloc[[0]].date).to_pydatetime()[0] - datetime.timedelta(seconds=1)
-    new_row.loc[:,'date'] = new_date
+    new_row.loc[:,BARCOUNT_COL] = 0
+    new_date = input_df.index[0] - datetime.timedelta(seconds=1)
+    new_row.loc[:,'index'] = new_date
     new_row.index.values[0] = input_df.index.values[0] - 1
 
     # Append new row to the beginning of the data frame
@@ -137,21 +139,21 @@ def create_volume_bars(input_df, bar_size, min_bar_size=0):
         if (bar_vol_prev > min_bar_size and bar_vol_curr - bar_size > abs(bar_vol_prev - bar_size)) \
                     or (t == T and bar_vol_prev > 0):
             # Adding the next tick would make the bar too big, so we save the bar
-            vol_bars.append(dict(utc_timestamp=df.index.values[t_start], 
-                                 volume=bar_vol_prev,
-                                 average=vol_times_prc[t_start:t].sum() / bar_vol_prev,
-                                 barCount=df.barCount.values[t_start:t].sum(),
-                                 date=df.date.values[t_start],
-                                 open=df.open.values[t_start],
-                                 high=df.high.values[t_start:t].max(),
-                                 low=df.low.values[t_start:t].min(),
-                                 close=df.close.values[t-1]
-                                ))
+            vol_bars.append({'index' : df.index.values[t_start], 
+                             'volume' : bar_vol_prev,
+                             'average' : vol_times_prc[t_start:t].sum() / bar_vol_prev,
+                             BARCOUNT_COL : df[BARCOUNT_COL].values[t_start:t].sum(),
+                             'open' : df.open.values[t_start],
+                             'high' : df.high.values[t_start:t].max(),
+                             'low' : df.low.values[t_start:t].min(),
+                             'close' : df.close.values[t-1]
+                            })
             t_start = t
             vol = 0
 
     output = pd.DataFrame(vol_bars)
-    output.set_index('utc_timestamp', inplace=True)
+    output.set_index('index', inplace=True)
+    output.index.name = input_df.index.name
     return output
 
 def convert_tick_to_time_bars(input_df):
@@ -176,78 +178,58 @@ def convert_tick_to_time_bars(input_df):
     ts.drop('vol_price', axis=1, inplace=True)
     input_df.drop('vol_price', axis=1, inplace=True)
     return ts
-    
+
 def downsample(input_df, frequency):
-    """ Downsample a data frame from a higher to a lower frequency.
+    """Downsample a time series to the target frequency.
+    
+       Arguments:
+           input_df: (DataFrame) the pandas df has a pandas
+               DatetimeIndex as its index, and columns
+               named open/high/low/close. Optional extra columns
+               are average/bar_count/barCount.
+           frequency: (str) the target frequency for downsampling.
+               For example, '60s' to arregate at 1-minute intervals.
     """
-    col_names = input_df.columns
-    seconds_per_bar = ibk.helper.TimeHelper(frequency, 'frequency').total_seconds()
-    if 'volume' in col_names:
-        input_df = input_df.iloc[input_df.volume.values > 0]
+    agg_rules = {'open' : 'first',
+                 'close' : 'last',
+                 'high' : 'max',
+                 'low' : 'min',
+                 'volume' : 'sum',
+                }
 
-    # We need to add a single repeated row at the beginning of the DataFrame
-    #   which will make the algorithm more simple
-    new_row = input_df.iloc[[0]].copy()
-    new_row.index.values[0] = input_df.index.values[0] - 1
+    if 'volume' in input_df.columns:
+        agg_rules['volume'] = 'sum'
+        
+    if 'bar_count' in input_df.columns:
+        agg_rules['bar_count'] = 'sum'
 
-    # Append new row to the beginning of the data frame
-    df = pd.concat([new_row, input_df])
+    if 'barCount' in input_df.columns:
+        agg_rules['barCount'] = 'sum'
 
-    if 'volume' in col_names:
-        df['volume'].iloc[0] = 0
-        expanding_vol = df.volume.expanding().sum()
-        vol_times_prc = df.volume.values * df.average.values
+    # Add aggregation rule for 'average'/VWAP if it is in the columns
+    if 'average' in input_df.columns:
+        agg_rules['total_price_volume'] = 'sum'
+        input_df['total_price_volume'] = input_df.average * input_df.volume.values
 
-    T = df.shape[0]
-    t_start = t_end = 1
-    bar_start_time = int(input_df.index.values[0] / seconds_per_bar) * seconds_per_bar
+    ts = input_df.groupby(pd.Grouper(freq=frequency)).agg(agg_rules)
 
-    barcount_col = _get_barcount_col(input_df)
+    # Calculate the new average price / VWAP if the data is available
+    if 'average' in input_df.columns:
+        input_df.drop('total_price_volume', axis=1, inplace=True)
+        ts['average'] = ts.total_price_volume / ts.volume.values
+        ts.drop('total_price_volume', axis=1, inplace=True)
 
-    time_bars = []
-    while bar_start_time < df.index.values[-1]:
-        bar_end_time = min(bar_start_time + seconds_per_bar, df.index.values[-1] + 1)        
-        while t_end < T and df.index.values[t_end] < bar_end_time:
-            t_end += 1
+    # Fill any missing observations with the prior closing price
+    idx_nan = np.isnan(ts.close.values)
+    ts.close.ffill(inplace=True)
 
-        # Adding the next tick would make the bar too big, so we save the bar
-        bar = dict(utc_timestamp=bar_start_time,
-                   open=df.open.values[t_start],
-                   high=df.high.values[t_start:t_end].max(),
-                   low=df.low.values[t_start:t_end].min(),
-                   close=df.close.values[t_end-1])
+    fill_cols = ['open', 'high', 'low']        
+    if 'average' in input_df.columns:
+        fill_cols.append('average')        
 
-        if barcount_col is not None:
-            bar[barcount_col] = df[barcount_col].values[t_start:t_end].sum()
-        if 'volume' in col_names:
-            bar['volume'] = int(expanding_vol.values[t_end - 1] - expanding_vol.values[t_start - 1])
-        if 'average' in col_names:
-            bar['average'] = vol_times_prc[t_start:t_end].sum() / bar['volume']
-
-        time_bars.append(bar)
-        t_start = t_end  
-        if t_start == T:
-            bar_start_time = df.index.values[-1]
-        else:
-            while bar_start_time + seconds_per_bar <= df.index.values[t_start]:
-                bar_start_time += seconds_per_bar
-
-
-    # Create a DataFrame for output and set the index to be the UTC timestamp
-    output = pd.DataFrame(time_bars)
-    output.set_index('utc_timestamp', inplace=True)    
-    tz_est = ibk.constants.TIMEZONE_EST    
-
-    # Get the new dates based on the timestamp
-    dates = []
-    for idx in output.index.values:
-        dt = ibk.helper.convert_utc_timestamp_to_datetime(idx, tz_name=tz_est)
-        dates.append(ibk.helper.convert_datetime_to_tws_date(dt))
-    output['date'] = dates
-
-    # Put the columns back into the original order before returning
-    output = output.loc[:,input_df.columns]
-    return output
+    close_vals = np.tile(ts.close[idx_nan].values.reshape(-1, 1), (1, len(fill_cols)))
+    ts.loc[idx_nan, fill_cols] = close_vals
+    return ts
 
 def set_timestamp_index(df):
     """ Set the index of the data frame to be the UTC timestamp.
