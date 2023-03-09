@@ -194,7 +194,6 @@ def downsample(input_df, frequency, agg_rules=None):
         agg_rules = {
             'open' : 'first',
             'close' : 'last',
-            'adjusted_close': 'last',
             'high' : 'max',
             'low' : 'min',
             'volume' : 'sum',
@@ -208,6 +207,9 @@ def downsample(input_df, frequency, agg_rules=None):
 
     if 'barCount' in input_df.columns:
         agg_rules['barCount'] = 'sum'
+
+    if 'adjusted_close' in input_df.columns:
+        agg_rules['adjusted_close'] = 'last'
 
     # Add aggregation rule for 'average'/VWAP if it is in the columns
     if 'average' in input_df.columns:
