@@ -179,7 +179,7 @@ def convert_tick_to_time_bars(input_df):
     input_df.drop('vol_price', axis=1, inplace=True)
     return ts
 
-def downsample(input_df, frequency):
+def downsample(input_df, frequency, agg_rules=None):
     """Downsample a time series to the target frequency.
     
        Arguments:
@@ -190,12 +190,15 @@ def downsample(input_df, frequency):
            frequency: (str) the target frequency for downsampling.
                For example, '60s' to arregate at 1-minute intervals.
     """
-    agg_rules = {'open' : 'first',
-                 'close' : 'last',
-                 'high' : 'max',
-                 'low' : 'min',
-                 'volume' : 'sum',
-                }
+    if agg_rules is None:
+        agg_rules = {
+            'open' : 'first',
+            'close' : 'last',
+            'adjusted_close': 'last',
+            'high' : 'max',
+            'low' : 'min',
+            'volume' : 'sum',
+            }
 
     if 'volume' in input_df.columns:
         agg_rules['volume'] = 'sum'
