@@ -216,7 +216,13 @@ def downsample(input_df, frequency, agg_rules=None):
         agg_rules['total_price_volume'] = 'sum'
         input_df['total_price_volume'] = input_df.average * input_df.volume.values
 
-    ts = input_df.groupby(pd.Grouper(freq=frequency)).agg(agg_rules)
+    try:
+        ts = input_df.groupby(pd.Grouper(freq=frequency)).agg(agg_rules)
+    except TypeError:
+        # If the dates are irregularly spaced, we get an error saying
+        # the index must be a DatetimeIndex
+        input_df.index = pd.DatetimeIndex(input_df.index)
+        ts = input_df.groupby(pd.Grouper(freq=frequency)).agg(agg_rules)
 
     # Calculate the new average price / VWAP if the data is available
     if 'average' in input_df.columns:
