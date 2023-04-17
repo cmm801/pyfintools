@@ -74,7 +74,7 @@ def _get_constraints_cvx(asset_cov, lb=None, ub=None, unit_constraint=None,
     return full_constraints
 
 def _get_constraints_scipy(asset_cov, lb=None, ub=None, unit_constraint=None, 
-                           constraints=None, vol_target=None):
+                           constraints=None, vol_target=None, vol_lb=0):
     """ Get the constraints in a form used by the scipy optimizer. """
     n_assets = asset_cov.shape[0]
 
@@ -89,7 +89,7 @@ def _get_constraints_scipy(asset_cov, lb=None, ub=None, unit_constraint=None,
 
     if vol_target is not None:
         var_fun = lambda x : x @ asset_cov @ x
-        vol_constr = scipy.optimize.NonlinearConstraint(var_fun, lb=-np.inf, ub=vol_target ** 2)
+        vol_constr = scipy.optimize.NonlinearConstraint(var_fun, lb=vol_lb ** 2, ub=vol_target ** 2)
         base_constraints.append(vol_constr)
 
     if constraints is not None:
