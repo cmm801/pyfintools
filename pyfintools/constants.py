@@ -1,6 +1,7 @@
-import os
-#import pkg_resources
 import numpy as np
+
+from enum import Enum
+
 
 ########################################################################
 # Path to External Data - this will be different for each user.
@@ -20,8 +21,11 @@ CONTINUOUS_COMPOUNDING = -1
 
 # Optimization methods - we define these here instead of in the optimization
 # package because they also get used by the SAA packages and we want to avoid cross-dependencies
-METHOD_MEAN_VARIANCE = 'meanvar'
-METHOD_MIN_VARIANCE = 'minvar'
-METHOD_CVAR = 'cvar'
-METHOD_ROBUST = 'robust'
-METHOD_ROBUST_ERC = 'robust_erc'
+class OptimMethods(Enum):
+    MEAN_VARIANCE = 'meanvar'
+    MIN_VARIANCE = 'minvar'
+    CVAR = 'cvar'
+    ROBUST = 'robust'
+    ERC = 'erc'          # Equal Risk Contribution (aka risk parity)
+    RISK_PARITY = 'erc'  # This is an alias for ERC
+    ROBUST_ERC = 'robust_erc'

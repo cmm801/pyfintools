@@ -10,7 +10,7 @@
         robust ERC (proprietary method).
         
     Any new optimization techniques should be integrated into the 'optimize' function by
-    defining a new optimization constant (e.g. METHOD_XXXX), and then extending optimize
+    defining a new enum in OptimMethods (in constants.py), and then extending optimize
     to call the new private function when the new optimization method is specified.
         
     This library also includes some code for working with constraints from various 
@@ -25,22 +25,24 @@ import scipy.linalg
 import scipy.optimize    
 from collections import defaultdict
 
-import pyfintools.constants
+from pyfintools.constants import OptimMethods
 import pyfintools.tools.risk
 import pyfintools.tools.utils
 
 
 def optimize(method, **kwargs):
-    if pyfintools.constants.METHOD_MEAN_VARIANCE == method:
+    if OptimMethods.MEAN_VARIANCE.value == method:
         return optimize_mean_variance(**kwargs)
-    elif pyfintools.constants.METHOD_MIN_VARIANCE == method:
+    elif OptimMethods.MIN_VARIANCE.value == method:
         return optimize_min_variance(**kwargs)    
-    elif pyfintools.constants.METHOD_CVAR == method:
+    elif OptimMethods.CVAR.value == method:
         return optimize_cvar(**kwargs)
-    elif pyfintools.constants.METHOD_ROBUST == method:
+    elif OptimMethods.ROBUST.value == method:
         return optimize_robust(**kwargs)
-    elif pyfintools.constants.METHOD_ROBUST_ERC == method:
-        return optimize_robust_erc(**kwargs)    
+    elif OptimMethods.ERC.value == method:
+        return optimize_erc(**kwargs)
+    elif OptimMethods.ROBUST_ERC.value == method:
+        return optimize_robust_erc(**kwargs)
     else:
         raise ValueError(f'Unsupported optimization method: {method}')
 
@@ -153,6 +155,53 @@ def optimize_robust(vol_target, mu, asset_cov, unc_cov, kappa, lb=None, ub=None,
     fval = prob.solve(solver=cvxpy.ECOS, verbose=verbose)
     w_opt = w.value
     return w_opt, fval
+
+def optimize_erc(asset_cov, vol_lb=0, vol_ub=np.inf, lb=None, ub=None, unit_constraint=True,
+                 constraints=None, seed=None, scipy_method='SLSQP', risk_measure='var', tol=1e-10, **kwargs):
+    """ Perform an Equal Risk Contribution (aka Risk Parity) optimization.
+
+    Minimize the sum of squared deviations to equal risk from the different assets, 
+    subject to the contraints.
+
+    Arguments:
+        vol_ub: (float) the minimum volatility of the allocation.
+        vol_lb: (float) the maximum volatility of the allocation.
+        asset_cov: (numpy array) the expected covariances of asset returns
+        lb: (numpy array) the lower bounds on each allocation
+        ub: (numpy array) the upper bounds on each allocation
+        unit_constraint: (bool) whether to enforce that weights sum to 1 (default is True)
+        constraints: (list) a list of scipy constraint objects
+        tol: (float) tolerance with which constraints will be accepted
+        scipy_method: (str) the scipy optimization method to be used. Default is 'SLSQP'
+        seed: (int) the random seed that guarantees reproducible random numbers. If set to None,
+            then the random numbers are not reproducible. Default value is None.
+        """
+    def _risk_budget_objective_error(weights, args):
+        N = weights.size
+        asset_cov = args[0]
+        total_risk = pyfintools.tools.risk.calc_risk(asset_cov, weights.T,
+            risk_measure=risk_measure)
+        risk_contrib = pyfintools.tools.risk.calc_contribution_to_risk(asset_cov, weights.T,
+            risk_measure=risk_measure)
+        risk_target = total_risk/N * np.ones((N,), dtype=float)
+        assert np.isclose(risk_contrib.sum(), total_risk)
+        return np.sum(np.square(risk_contrib - risk_target))
+
+    N = asset_cov.shape[0]
+    full_constraints, bounds =  _get_constraints_scipy(asset_cov, lb=lb, ub=ub,
+        unit_constraint=unit_constraint, constraints=constraints, vol_lb=vol_lb, vol_target=vol_ub)
+    if scipy_method == 'SLSQP':
+        full_constraints = get_dict_of_constraints(full_constraints)
+
+    res = scipy.optimize.minimize(fun=_risk_budget_objective_error,
+                                  x0=np.ones((N,), dtype=float) / N,
+                                  args=[asset_cov],
+                                  method=scipy_method,
+                                  constraints=full_constraints,
+                                  bounds=bounds,
+                                  tol=tol,
+                                  options={'disp': False})
+    return res.x
 
 def optimize_robust_erc(vol_target, mu, asset_cov, unc_cov, kappa, lb=None, ub=None, unit_constraint=True,
                         verbose=False, n_trials=500, risk_weights=1.0, constraints=None, seed=None,
