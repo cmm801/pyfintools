@@ -108,11 +108,16 @@ def optimize_min_variance(asset_cov, lb=None, ub=None, verbose=False, unit_const
     asset_cov = np.array(asset_cov, dtype=float)
     n_assets = asset_cov.shape[0]
 
+    # Handle occasional problems with solver thinking cov matrix is not pos-def
+    if np.linalg.eig(asset_cov)[0].min() > -1e-10:
+        asset_cov = cvxpy.psd_wrap(asset_cov)
+
     w = cvxpy.Variable(n_assets)
     full_constraints = _get_constraints_cvx(asset_cov, lb=lb, ub=ub, unit_constraint=unit_constraint, 
                                             constraints=constraints, cvx_var=w)
     objective = cvxpy.Minimize(cvxpy.quad_form(w, asset_cov))
     prob = cvxpy.Problem(objective=objective, constraints=full_constraints)
+
     fval = prob.solve(solver=cvxpy.ECOS, verbose=verbose)
     w_opt = w.value
     return w_opt, fval
