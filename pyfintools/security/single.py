@@ -31,10 +31,10 @@ import pandas as pd
 import datetime
 import copy
 
-import secdb.constants
-import secdb.tools.freq
-import secdb.security.constants
-import secdb.security.helper
+import pyfintools.constants
+import pyfintools.tools.freq
+import pyfintools.security.constants
+import pyfintools.security.helper
 
 
 class Security(object):
@@ -248,7 +248,7 @@ class Security(object):
             type of object is defined in the timeseries module.
         """ 
         sec_info = pd.DataFrame(pd.Series(self.security_info)).T.set_index('sec_code')
-        ts, meta = secdb.security.helper.get_ts_and_meta(tickers=self.get_tickers(series_type_codes),
+        ts, meta = pyfintools.security.helper.get_ts_and_meta(tickers=self.get_tickers(series_type_codes),
                                                          ts_dbs=self.get_ts_dbs(series_type_codes),
                                                          security_info=sec_info,
                                                          ticker_info=self.ticker_info, 
@@ -259,7 +259,7 @@ class Security(object):
                                                          backfill=backfill)
 
         # Construct the time series object
-        class_handle = secdb.security.helper.get_module_equivalent_class_handle(self, 'single', 'timeseries')
+        class_handle = pyfintools.security.helper.get_module_equivalent_class_handle(self, 'single', 'timeseries')
         return class_handle(ts, meta)
     
     def has_time_series(self, series_type_code):
@@ -449,7 +449,7 @@ class ExchangeTradedEquity(Equity):
 
     @leverage.setter
     def leverage(self, val):
-        assert isinstance(val, secdb.constants.NUMERIC_DATA_TYPES), 'leverage must be a float or integer.'
+        assert isinstance(val, pyfintools.constants.NUMERIC_DATA_TYPES), 'leverage must be a float or integer.'
         self.security_info['leverage'] = float(val)
 
 
@@ -489,7 +489,7 @@ class Bond(Asset):
 
     @par_value.setter
     def par_value(self, val):
-        assert isinstance(val, secdb.constants.NUMERIC_DATA_TYPES), 'par_value must be a float or integer.'
+        assert isinstance(val, pyfintools.constants.NUMERIC_DATA_TYPES), 'par_value must be a float or integer.'
         self.security_info['par_value'] = float(val)
 
     @property
@@ -525,7 +525,7 @@ class Bond(Asset):
 
     @coupon_rate.setter
     def coupon_rate(self, val):
-        assert isinstance(val, secdb.constants.NUMERIC_DATA_TYPES), 'coupon_rate must be a float or integer.'
+        assert isinstance(val, pyfintools.constants.NUMERIC_DATA_TYPES), 'coupon_rate must be a float or integer.'
         self.security_info['coupon_rate'] = float(val)
 
     @property
@@ -594,7 +594,7 @@ class Option(Derivative):
 
     @strike.setter
     def strike(self, val):
-        assert isinstance(val, secdb.constants.NUMERIC_DATA_TYPES), 'strike must be a float or integer.'
+        assert isinstance(val, pyfintools.constants.NUMERIC_DATA_TYPES), 'strike must be a float or integer.'
         self.security_info['strike'] = float(val)
 
     @property
@@ -705,7 +705,7 @@ class AssetIndex(PriceIndex):
 
     @hedging_ratio.setter
     def hedging_ratio(self, val):
-        assert isinstance(val, secdb.constants.NUMERIC_DATA_TYPES), 'hedging_ratio must be a float or integer.'
+        assert isinstance(val, pyfintools.constants.NUMERIC_DATA_TYPES), 'hedging_ratio must be a float or integer.'
         self.security_info['hedging_ratio'] = float(val)
 
 
@@ -875,10 +875,10 @@ class Rates(Security):
         raise NotImplementedError('Need to implement setter function for tenor_in_years.')
 
     def _get_tenor_in_years(self):
-        if self.tenor == secdb.security.constants.TENOR_SPOT:
+        if self.tenor == pyfintools.security.constants.TENOR_SPOT:
             return 0
         elif self.tenor:
-            return 1 / secdb.tools.freq.get_periods_per_year(self.tenor)
+            return 1 / pyfintools.tools.freq.get_periods_per_year(self.tenor)
         else:
             return np.nan
 
@@ -1014,7 +1014,7 @@ def from_metadata(security_info, ticker_info, ts_db=None):
         From the meta data (e.g. the category 1-3 codes), this function determines the appropriate
         Security class for the given instrument, and returns the initialized class.
     """ 
-    return secdb.security.helper.get_security(security_info, ticker_info, ts_db=ts_db)
+    return pyfintools.security.helper.get_security(security_info, ticker_info, ts_db=ts_db)
 
 def _format_date_value(val, prop_name):
     """ A helper function for correctly formatting the meta data pertaining to dates/times.

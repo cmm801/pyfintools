@@ -12,7 +12,7 @@ import yaml
 import string
 import numpy as np
 
-import secdb.constants
+import pyfintools.constants
 
 
 def get_project_root() -> Path:
@@ -21,7 +21,7 @@ def get_project_root() -> Path:
 
 def get_code_root():
     root_path = get_project_root()
-    return os.path.join(root_path, 'secdb')
+    return os.path.join(root_path, 'pyfintools')
 
 def get_test_root():
     root_path = get_project_root()
@@ -82,10 +82,10 @@ def search(search_string, extension='.py', verbose=1):
     [print(x) for x in output]
 
 def is_boolean(x):
-    return isinstance(x, secdb.constants.BOOLEAN_DATA_TYPES)
+    return isinstance(x, pyfintools.constants.BOOLEAN_DATA_TYPES)
 
 def is_numeric(x):
-    return isinstance(x, secdb.constants.NUMERIC_DATA_TYPES)
+    return isinstance(x, pyfintools.constants.NUMERIC_DATA_TYPES)
 
 def is_integer(x):
     if not is_numeric(x):

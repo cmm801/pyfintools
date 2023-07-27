@@ -179,7 +179,7 @@ def convert_tick_to_time_bars(input_df):
     input_df.drop('vol_price', axis=1, inplace=True)
     return ts
 
-def downsample(input_df, frequency):
+def downsample(input_df, frequency, agg_rules=None):
     """Downsample a time series to the target frequency.
     
        Arguments:
@@ -190,12 +190,14 @@ def downsample(input_df, frequency):
            frequency: (str) the target frequency for downsampling.
                For example, '60s' to arregate at 1-minute intervals.
     """
-    agg_rules = {'open' : 'first',
-                 'close' : 'last',
-                 'high' : 'max',
-                 'low' : 'min',
-                 'volume' : 'sum',
-                }
+    if agg_rules is None:
+        agg_rules = {
+            'open' : 'first',
+            'close' : 'last',
+            'high' : 'max',
+            'low' : 'min',
+            'volume' : 'sum',
+            }
 
     if 'volume' in input_df.columns:
         agg_rules['volume'] = 'sum'
@@ -206,12 +208,44 @@ def downsample(input_df, frequency):
     if 'barCount' in input_df.columns:
         agg_rules['barCount'] = 'sum'
 
+<<<<<<< HEAD
     # Add aggregation rule for 'average'/VWAP if it is in the columns
     if 'average' in input_df.columns:
         agg_rules['total_price_volume'] = 'sum'
         input_df['total_price_volume'] = input_df.average * input_df.volume.values
 
     ts = input_df.groupby(pd.Grouper(freq=frequency)).agg(agg_rules)
+
+    # Calculate the new average price / VWAP if the data is available
+    if 'average' in input_df.columns:
+        input_df.drop('total_price_volume', axis=1, inplace=True)
+        ts['average'] = ts.total_price_volume / ts.volume.values
+        ts.drop('total_price_volume', axis=1, inplace=True)
+
+    # Fill any missing observations with the prior closing price
+    idx_nan = np.isnan(ts.close.values)
+    ts.close.ffill(inplace=True)
+
+    fill_cols = ['open', 'high', 'low']        
+    if 'average' in input_df.columns:
+        fill_cols.append('average')        
+
+=======
+    if 'adjusted_close' in input_df.columns:
+        agg_rules['adjusted_close'] = 'last'
+
+    # Add aggregation rule for 'average'/VWAP if it is in the columns
+    if 'average' in input_df.columns:
+        agg_rules['total_price_volume'] = 'sum'
+        input_df['total_price_volume'] = input_df.average * input_df.volume.values
+
+    try:
+        ts = input_df.groupby(pd.Grouper(freq=frequency)).agg(agg_rules)
+    except TypeError:
+        # If the dates are irregularly spaced, we get an error saying
+        # the index must be a DatetimeIndex
+        input_df.index = pd.DatetimeIndex(input_df.index)
+        ts = input_df.groupby(pd.Grouper(freq=frequency)).agg(agg_rules)
 
     # Calculate the new average price / VWAP if the data is available
     if 'average' in input_df.columns:

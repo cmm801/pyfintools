@@ -2,6 +2,7 @@
 """
 
 import numpy as np
+import scipy.linalg
 
 
 def calc_uncertainty_distance(unc_cov, x_0, x_1):

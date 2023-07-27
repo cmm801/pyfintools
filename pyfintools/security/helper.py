@@ -3,8 +3,8 @@ import importlib
 import pandas as pd
 import numpy as np
 
-import secdb.tools.fts
-import secdb.security.constants as constants
+import pyfintools.tools.fts
+import pyfintools.security.constants as constants
 
 
 def get_module_equivalent_class_handle(obj, from_module, to_module):
@@ -16,7 +16,7 @@ def get_module_equivalent_class_handle(obj, from_module, to_module):
     class_sub_name = obj.__class__.__name__
     if class_sub_name == module_base_map[from_module]:
         class_sub_name = module_base_map[to_module]
-    class_handle = getattr(importlib.import_module('secdb.security.timeseries'), class_sub_name)
+    class_handle = getattr(importlib.import_module('pyfintools.security.timeseries'), class_sub_name)
     return class_handle
     
 def get_ts_and_meta(tickers, ts_dbs, security_info, ticker_info, 
@@ -39,7 +39,7 @@ def get_ts_and_meta(tickers, ts_dbs, security_info, ticker_info,
         meta.loc['ticker_code'] = ts.columns
     
     # Convert any date columns to datetime
-    idx_dt = meta.loc['ts_type'].values == secdb.tools.fts.TS_TYPE_DATES
+    idx_dt = meta.loc['ts_type'].values == pyfintools.tools.fts.TS_TYPE_DATES
     if np.any(idx_dt):
         ts.iloc[:,idx_dt] = ts.iloc[:,idx_dt].astype(np.datetime64)
     
@@ -81,7 +81,7 @@ def get_security(security_info, ticker_info, ts_db=None):
     if class_sub_name is None:
         raise ValueError('Unknown security class for category codes: {} {}'.format(cat_1_code, cat_2_code))
     
-    class_handle = getattr(importlib.import_module('secdb.security.single'), class_sub_name)
+    class_handle = getattr(importlib.import_module('pyfintools.security.single'), class_sub_name)
     return class_handle(security_info=security_info, ticker_info=ticker_info, ts_db=ts_db)
 
 def get_security_panel_name(cat_1_codes, cat_2_codes, default_class_name):
@@ -97,8 +97,8 @@ def get_security_panel_name(cat_1_codes, cat_2_codes, default_class_name):
 
 def get_required_security_properties(class_name):
     """ Get a list of properties that are used by a particular Security class. """
-    sec_class_handle = getattr(importlib.import_module('secdb.security.single'), class_name)
-    base_class_handle = getattr(importlib.import_module('secdb.security.single'), 'Security')    
+    sec_class_handle = getattr(importlib.import_module('pyfintools.security.single'), class_name)
+    base_class_handle = getattr(importlib.import_module('pyfintools.security.single'), 'Security')    
     base_props = constants.SECURITY_BASE_PROPERTIES
     additional_props = list(set(dir(sec_class_handle())) - set(dir(base_class_handle())))
     return base_props + additional_props
@@ -318,7 +318,7 @@ class FXHelper(object):
                                  category_1_code=cat_1_code,
                                  category_2_code=cat_2_code)
             if _instr is None or _instr == 1:
-                new_meta_dict['ts_type'] = secdb.tools.fts.TS_TYPE_LEVELS
+                new_meta_dict['ts_type'] = pyfintools.tools.fts.TS_TYPE_LEVELS
                 new_meta_list.append(pd.Series(new_meta_dict))
             else:
                 cols = [x['label'] for x in _instr]

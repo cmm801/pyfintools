@@ -10,7 +10,7 @@
         robust ERC (proprietary method).
         
     Any new optimization techniques should be integrated into the 'optimize' function by
-    defining a new optimization constant (e.g. METHOD_XXXX), and then extending optimize
+    defining a new enum in OptimMethods (in constants.py), and then extending optimize
     to call the new private function when the new optimization method is specified.
         
     This library also includes some code for working with constraints from various 
@@ -25,22 +25,24 @@ import scipy.linalg
 import scipy.optimize    
 from collections import defaultdict
 
-import secdb.constants
-import secdb.tools.risk
-import secdb.tools.utils
+from pyfintools.constants import OptimMethods
+import pyfintools.tools.risk
+import pyfintools.tools.utils
 
 
 def optimize(method, **kwargs):
-    if secdb.constants.METHOD_MEAN_VARIANCE == method:
+    if OptimMethods.MEAN_VARIANCE.value == method:
         return optimize_mean_variance(**kwargs)
-    elif secdb.constants.METHOD_MIN_VARIANCE == method:
+    elif OptimMethods.MIN_VARIANCE.value == method:
         return optimize_min_variance(**kwargs)    
-    elif secdb.constants.METHOD_CVAR == method:
+    elif OptimMethods.CVAR.value == method:
         return optimize_cvar(**kwargs)
-    elif secdb.constants.METHOD_ROBUST == method:
+    elif OptimMethods.ROBUST.value == method:
         return optimize_robust(**kwargs)
-    elif secdb.constants.METHOD_ROBUST_ERC == method:
-        return optimize_robust_erc(**kwargs)    
+    elif OptimMethods.ERC.value == method:
+        return optimize_erc(**kwargs)
+    elif OptimMethods.ROBUST_ERC.value == method:
+        return optimize_robust_erc(**kwargs)
     else:
         raise ValueError(f'Unsupported optimization method: {method}')
 
@@ -74,7 +76,7 @@ def _get_constraints_cvx(asset_cov, lb=None, ub=None, unit_constraint=None,
     return full_constraints
 
 def _get_constraints_scipy(asset_cov, lb=None, ub=None, unit_constraint=None, 
-                           constraints=None, vol_target=None):
+                           constraints=None, vol_target=None, vol_lb=0):
     """ Get the constraints in a form used by the scipy optimizer. """
     n_assets = asset_cov.shape[0]
 
@@ -89,7 +91,7 @@ def _get_constraints_scipy(asset_cov, lb=None, ub=None, unit_constraint=None,
 
     if vol_target is not None:
         var_fun = lambda x : x @ asset_cov @ x
-        vol_constr = scipy.optimize.NonlinearConstraint(var_fun, lb=-np.inf, ub=vol_target ** 2)
+        vol_constr = scipy.optimize.NonlinearConstraint(var_fun, lb=vol_lb ** 2, ub=vol_target ** 2)
         base_constraints.append(vol_constr)
 
     if constraints is not None:
@@ -106,11 +108,16 @@ def optimize_min_variance(asset_cov, lb=None, ub=None, verbose=False, unit_const
     asset_cov = np.array(asset_cov, dtype=float)
     n_assets = asset_cov.shape[0]
 
+    # Handle occasional problems with solver thinking cov matrix is not pos-def
+    if np.linalg.eig(asset_cov)[0].min() > -1e-10:
+        asset_cov = cvxpy.psd_wrap(asset_cov)
+
     w = cvxpy.Variable(n_assets)
     full_constraints = _get_constraints_cvx(asset_cov, lb=lb, ub=ub, unit_constraint=unit_constraint, 
                                             constraints=constraints, cvx_var=w)
     objective = cvxpy.Minimize(cvxpy.quad_form(w, asset_cov))
     prob = cvxpy.Problem(objective=objective, constraints=full_constraints)
+
     fval = prob.solve(solver=cvxpy.ECOS, verbose=verbose)
     w_opt = w.value
     return w_opt, fval
@@ -153,6 +160,53 @@ def optimize_robust(vol_target, mu, asset_cov, unc_cov, kappa, lb=None, ub=None,
     fval = prob.solve(solver=cvxpy.ECOS, verbose=verbose)
     w_opt = w.value
     return w_opt, fval
+
+def optimize_erc(asset_cov, vol_lb=0, vol_ub=np.inf, lb=None, ub=None, unit_constraint=True,
+                 constraints=None, seed=None, scipy_method='SLSQP', risk_measure='var', tol=1e-10, **kwargs):
+    """ Perform an Equal Risk Contribution (aka Risk Parity) optimization.
+
+    Minimize the sum of squared deviations to equal risk from the different assets, 
+    subject to the contraints.
+
+    Arguments:
+        vol_ub: (float) the minimum volatility of the allocation.
+        vol_lb: (float) the maximum volatility of the allocation.
+        asset_cov: (numpy array) the expected covariances of asset returns
+        lb: (numpy array) the lower bounds on each allocation
+        ub: (numpy array) the upper bounds on each allocation
+        unit_constraint: (bool) whether to enforce that weights sum to 1 (default is True)
+        constraints: (list) a list of scipy constraint objects
+        tol: (float) tolerance with which constraints will be accepted
+        scipy_method: (str) the scipy optimization method to be used. Default is 'SLSQP'
+        seed: (int) the random seed that guarantees reproducible random numbers. If set to None,
+            then the random numbers are not reproducible. Default value is None.
+        """
+    def _risk_budget_objective_error(weights, args):
+        N = weights.size
+        asset_cov = args[0]
+        total_risk = pyfintools.tools.risk.calc_risk(asset_cov, weights.T,
+            risk_measure=risk_measure)
+        risk_contrib = pyfintools.tools.risk.calc_contribution_to_risk(asset_cov, weights.T,
+            risk_measure=risk_measure)
+        risk_target = total_risk/N * np.ones((N,), dtype=float)
+        assert np.isclose(risk_contrib.sum(), total_risk)
+        return np.sum(np.square(risk_contrib - risk_target))
+
+    N = asset_cov.shape[0]
+    full_constraints, bounds =  _get_constraints_scipy(asset_cov, lb=lb, ub=ub,
+        unit_constraint=unit_constraint, constraints=constraints, vol_lb=vol_lb, vol_target=vol_ub)
+    if scipy_method == 'SLSQP':
+        full_constraints = get_dict_of_constraints(full_constraints)
+
+    res = scipy.optimize.minimize(fun=_risk_budget_objective_error,
+                                  x0=np.ones((N,), dtype=float) / N,
+                                  args=[asset_cov],
+                                  method=scipy_method,
+                                  constraints=full_constraints,
+                                  bounds=bounds,
+                                  tol=tol,
+                                  options={'disp': False})
+    return res.x
 
 def optimize_robust_erc(vol_target, mu, asset_cov, unc_cov, kappa, lb=None, ub=None, unit_constraint=True,
                         verbose=False, n_trials=500, risk_weights=1.0, constraints=None, seed=None,
@@ -203,14 +257,14 @@ def optimize_robust_erc(vol_target, mu, asset_cov, unc_cov, kappa, lb=None, ub=N
 
     # Define the objective function (to minimize the variance of the individual contributions to risk)
     if risk_measure in ('entropy'):
-        min_fun = lambda x : -secdb.tools.risk.calc_risk(asset_cov, x, method=risk_method, risk_measure=risk_measure)
+        min_fun = lambda x : -pyfintools.tools.risk.calc_risk(asset_cov, x, method=risk_method, risk_measure=risk_measure)
     elif risk_measure in ('var', 'hh'):
-        min_fun = lambda x : secdb.tools.risk.calc_risk(asset_cov, x, method=risk_method, risk_measure=risk_measure)
+        min_fun = lambda x : pyfintools.tools.risk.calc_risk(asset_cov, x, method=risk_method, risk_measure=risk_measure)
     else:
         raise ValueError(f'Unsupported risk measure: {risk_measure}')
     
     # Define the uncertaint constraint
-    unc_fun = lambda x, x_meanvar : secdb.tools.risk.calc_normalized_uncertainty(mu, unc_cov, x, x_meanvar)
+    unc_fun = lambda x, x_meanvar : pyfintools.tools.risk.calc_normalized_uncertainty(mu, unc_cov, x, x_meanvar)
     unc_constr = scipy.optimize.NonlinearConstraint(lambda x : unc_fun(x, x_mv), lb=-kappa, ub=kappa)
     
     # Get the full list of constraints
@@ -362,7 +416,7 @@ def _remove_parentheses(string):
     while idx_start is not None:
         # Create a temporary random symbol as a placeholder for the expression
         expression = string[idx_start+1:idx_end]        
-        random_symbol = secdb.tools.utils.generate_random_string(10)
+        random_symbol = pyfintools.tools.utils.generate_random_string(10)
         placeholders[random_symbol] = expression
 
         # Replace the expression with the temporary random symbol

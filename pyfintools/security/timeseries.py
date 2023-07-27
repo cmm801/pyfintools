@@ -36,9 +36,9 @@ import scipy.interpolate
 import talib
 from collections import defaultdict, Iterable
 
-import secdb.tools.utils
-import secdb.tools.fts
-from secdb.security.constants import TENOR_SPOT, DEFAULT_CROSS_CURRENCY, DEFAULT_FX_HEDGING_FREQUENCY
+import pyfintools.tools.utils
+import pyfintools.tools.fts
+from pyfintools.security.constants import TENOR_SPOT, DEFAULT_CROSS_CURRENCY, DEFAULT_FX_HEDGING_FREQUENCY
 
 
 # Define some constants to categorize the types of currency conversion / hedging we may encounter
@@ -229,12 +229,12 @@ class TimeSeries(object):
     
     @ts_type.setter
     def ts_type(self, val):
-        secdb.tools.fts.check_valid_ts_type(val, allow_unknown=True)
+        pyfintools.tools.fts.check_valid_ts_type(val, allow_unknown=True)
         self.meta.loc['ts_type'] = val
     
     @ts_type.deleter
     def ts_type(self):
-        self.ts_type = secdb.tools.fts.TS_TYPE_UNKNOWN
+        self.ts_type = pyfintools.tools.fts.TS_TYPE_UNKNOWN
 
     def _get_property_value(self, attr, default_val=''):
         if attr in self.meta.index:
@@ -252,12 +252,12 @@ class TimeSeries(object):
             time series frequency (e.g. 'D', 'B', 'W', 'M', 'Y', etc.). 
             If no frequency can be inferred, then None will be returned.
         """
-        return secdb.tools.freq.infer_freq(self.index)
+        return pyfintools.tools.freq.infer_freq(self.index)
 
     @property
     def periods_per_year(self):
         """ Calculate the number of observations per year, given the time series' frequency. """
-        return secdb.tools.freq.get_periods_per_year(self.frequency)
+        return pyfintools.tools.freq.get_periods_per_year(self.frequency)
 
     def copy(self):
         """ Make a copy of the time series. """
@@ -276,13 +276,13 @@ class TimeSeries(object):
     def head(self, window=5, **kwargs):
         """ Keep just the first time series rows, determined by window. 
             Argument "window" can be an integer or a string (e.g. 12, or "1y", "3M", etc.) """
-        n = secdb.tools.freq.extract_window_size(window, self.ts)
+        n = pyfintools.tools.freq.extract_window_size(window, self.ts)
         return self._constructor(self.ts.head(n, **kwargs), self.meta.copy())
 
     def tail(self, window=5, **kwargs):
         """ Keep just the last time series rows, determined by window. 
             Argument "window" can be an integer or a string (e.g. 12, or "1y", "3M", etc.) """        
-        n = secdb.tools.freq.extract_window_size(window, self.ts)        
+        n = pyfintools.tools.freq.extract_window_size(window, self.ts)        
         return self._constructor(self.ts.tail(n, **kwargs), self.meta.copy())
 
     def ffill(self, **kwargs):
@@ -385,7 +385,7 @@ class TimeSeries(object):
         """ Compute the cumulative return of the time series. """
         return self._apply_fts_methods('cum_return')
 
-    def ann_return(self, mean_type=secdb.tools.fts.GEOMETRIC_MEAN, skipna=True):
+    def ann_return(self, mean_type=pyfintools.tools.fts.GEOMETRIC_MEAN, skipna=True):
         """ Compute the annual return of the time series. """
         sampling_freq = self.frequency        
         return self._apply_fts_methods('ann_return', sampling_freq=sampling_freq, mean_type=mean_type, skipna=skipna)
@@ -427,7 +427,7 @@ class TimeSeries(object):
         """
         return self._apply_fts_methods('CVaR', q=q, horizon=horizon)
 
-    def unsmooth_returns(self, method=secdb.tools.fts.UNSMOOTH_METHOD_GELTNER, **kwargs):
+    def unsmooth_returns(self, method=pyfintools.tools.fts.UNSMOOTH_METHOD_GELTNER, **kwargs):
         """ Unsmooth the returns/levels to remove auto-correlation. """
         return self._apply_fts_methods('unsmooth_returns', method=method, **kwargs)
 
@@ -503,7 +503,7 @@ class TimeSeries(object):
             new_ts_type = None
             for r in results:
                 if not hasattr(r, 'ts_type'):
-                    curr_ts_type = secdb.tools.fts.TS_TYPE_UNKNOWN
+                    curr_ts_type = pyfintools.tools.fts.TS_TYPE_UNKNOWN
                 else:
                     curr_ts_type = r.ts_type
 
@@ -535,7 +535,7 @@ class TimeSeries(object):
         """ Calculate the correlation of the time series. """
         return self.ts.corr(**kwargs)
     
-    def to_ts_type(self, target_type=secdb.tools.fts.TS_TYPE_LEVELS, sampling_freq=None):
+    def to_ts_type(self, target_type=pyfintools.tools.fts.TS_TYPE_LEVELS, sampling_freq=None):
         """ Convert the time series data to a new 'ts_type' 
         """
         # Get the original column order so we can put things back into the appropriate order
@@ -573,15 +573,15 @@ class TimeSeries(object):
     
     def to_levels(self, sampling_freq=None):
         """ Convert the time series data to 'levels' (e.g. from returns to price levels) """
-        return self.to_ts_type(target_type=secdb.tools.fts.TS_TYPE_LEVELS, sampling_freq=sampling_freq)
+        return self.to_ts_type(target_type=pyfintools.tools.fts.TS_TYPE_LEVELS, sampling_freq=sampling_freq)
 
     def to_simple_returns(self, sampling_freq=None):
         """ Convert the time series to simple (arithmetic) return. """
-        return self.to_ts_type(target_type=secdb.tools.fts.TS_TYPE_SIMPLE_RETURNS, sampling_freq=sampling_freq)
+        return self.to_ts_type(target_type=pyfintools.tools.fts.TS_TYPE_SIMPLE_RETURNS, sampling_freq=sampling_freq)
 
     def to_log_returns(self, sampling_freq=None):
         """ Convert the time series to log return. """
-        return self.to_ts_type(target_type=secdb.tools.fts.TS_TYPE_LOG_RETURNS, sampling_freq=sampling_freq)
+        return self.to_ts_type(target_type=pyfintools.tools.fts.TS_TYPE_LOG_RETURNS, sampling_freq=sampling_freq)
 
     def sort_columns(self, attrib_name, reverse=False):
         """ Sort the columns in alphabetical order. """
@@ -1149,11 +1149,11 @@ class FX(Rates):
             raise NotImplementedError('The algorithm needed to handle different time series types has not been implemented.')
 
         # Get the correctly formatted tenor and currency pair information from the input arguments
-        target_ccy_pairs, target_tenors = secdb.security.helper.format_ccy_pair_and_tenor_info(
+        target_ccy_pairs, target_tenors = pyfintools.security.helper.format_ccy_pair_and_tenor_info(
                                                                 target_ccy_pairs, target_tenors)
             
         # Create an instance of the FXHelper to assist with exchange rate construction
-        fx_helper = secdb.security.helper.FXHelper(base_currency=self.base_currency,
+        fx_helper = pyfintools.security.helper.FXHelper(base_currency=self.base_currency,
                                                    quote_currency=self.quote_currency,
                                                    labels=self.columns,
                                                    tenor=self.tenor,
@@ -1348,7 +1348,7 @@ class FX(Rates):
         ccy_pairs = [f'{risk_ccy}/{base_ccy}' for risk_ccy, base_ccy in \
                              zip(unh_asset_rtns.risk_currency, unh_asset_rtns.denominated_currency)]
         hdg_rtns = unh_asset_rtns + hedging_proceeds.ts[ccy_pairs].values
-        hdg_rtns.ts_type = secdb.tools.fts.TS_TYPE_SIMPLE_RETURNS
+        hdg_rtns.ts_type = pyfintools.tools.fts.TS_TYPE_SIMPLE_RETURNS
 
         # Return the unhedged time series with the original ts_type, and update the meta data
         asset_ts = hdg_rtns.to_ts_type(orig_ts_type)        
@@ -1488,7 +1488,7 @@ class FX(Rates):
             required_fwd_tenors = [roll_frequency]
 
         # Get the required currency pairs
-        currency_pairs = secdb.security.helper.get_currency_pairs_from_inputs(long_currency, short_currency)
+        currency_pairs = pyfintools.security.helper.get_currency_pairs_from_inputs(long_currency, short_currency)
         uniq_currency_pairs = list(set(currency_pairs))
         
         # Get time series for the spot exchange rates
@@ -1513,7 +1513,7 @@ class FX(Rates):
         spot_rates.columns = spot_rates.currency_pair
         fwd_rates.columns = fwd_rates.currency_pair
 
-        if pd.infer_freq(spot_rates.index) not in secdb.tools.freq.MONTHLY_FREQUENCIES:
+        if pd.infer_freq(spot_rates.index) not in pyfintools.tools.freq.MONTHLY_FREQUENCIES:
             raise NotImplementedError('Hedging is currently only supported for time series with monthly frequencies.')
 
         # Calculate the return of an FX forward or swap
@@ -1522,8 +1522,8 @@ class FX(Rates):
         hedging_proceeds = -spot_rtns + carry.values
         
         # Change the 'ts_type' before returning the objects
-        carry.ts_type = secdb.tools.fts.TS_TYPE_RATES
-        hedging_proceeds.ts_type = secdb.tools.fts.TS_TYPE_SIMPLE_RETURNS
+        carry.ts_type = pyfintools.tools.fts.TS_TYPE_RATES
+        hedging_proceeds.ts_type = pyfintools.tools.fts.TS_TYPE_SIMPLE_RETURNS
         return hedging_proceeds, carry
 
 
@@ -1585,14 +1585,14 @@ class PPP(FX):
             fx, unscl_ppp = fx.align(unscl_ppp, join='inner')
             
             if 'ema' == method:
-                w = secdb.tools.freq.extract_window_size(window, unscaled_ppp_ts)
+                w = pyfintools.tools.freq.extract_window_size(window, unscaled_ppp_ts)
                 df = np.log(fx) - np.log(unscl_ppp)
                 const = talib.EMA(df.iloc[:,0], w)
             elif 'expanding' == method:
                 const = np.log(fx).expanding(min_periods=min_periods).mean() - \
                         np.log(unscl_ppp).expanding(min_periods=min_periods).mean()
             elif 'rolling' == method:
-                w = secdb.tools.freq.extract_window_size(window, unscaled_ppp_ts)                
+                w = pyfintools.tools.freq.extract_window_size(window, unscaled_ppp_ts)                
                 const = np.log(fx).rolling(w).mean() - \
                         np.log(unscl_ppp).rolling(w).mean()
             else:
@@ -1636,7 +1636,7 @@ class PPP(FX):
                                     ts_type='levels',
                                     category_1_code='FX',
                                     category_2_code='PPP',
-                                    tenor=secdb.security.constants.TENOR_SPOT,
+                                    tenor=pyfintools.security.constants.TENOR_SPOT,
                                     tenor_in_years=0.0,
                                     base_currency=ref_ccy,
                                     quote_currency=unscaled_ppp_ts.risk_currency,
@@ -1732,7 +1732,7 @@ class YieldCurve(InterestRate):
                 self._compounding_freq = np.nan
             else:
                 # Otherwise, use the unique frequency, if it is an integer
-                if not secdb.tools.utils.is_integer(cmpd_freqs[0]):
+                if not pyfintools.tools.utils.is_integer(cmpd_freqs[0]):
                     raise ValueError('Valid compounding frequencies must be integers: {}'.format(cmpd_freqs[0]))
                 else:
                     self._compounding_freq = int(cmpd_freqs[0])
@@ -1751,7 +1751,7 @@ class YieldCurve(InterestRate):
                              linear or other complex extrapolation methods.
                 pricing_dates: the dates on which to obtain yields
         """
-        if secdb.tools.utils.is_numeric(target_tenors):
+        if pyfintools.tools.utils.is_numeric(target_tenors):
             target_tenors = np.array([target_tenors], dtype=float)
         elif isinstance(target_tenors, TimeSeries):
             target_tenors = target_tenors.ts
@@ -1870,14 +1870,14 @@ class YieldCurve(InterestRate):
         # Make sure the pricing date is a pandas Timestamp
         pricing_date = pd.Timestamp(pricing_date)
         
-        if not secdb.tools.utils.is_numeric(cashflows):
+        if not pyfintools.tools.utils.is_numeric(cashflows):
             cashflows = np.array(cashflows, dtype=float)
 
-        if not secdb.tools.utils.is_numeric(n_years_to_cashflows):
+        if not pyfintools.tools.utils.is_numeric(n_years_to_cashflows):
             n_years_to_cashflows = np.array(n_years_to_cashflows, dtype=float)
 
         zero_rates = self.get_zero_rates(n_years_to_cashflows, pricing_dates=[pricing_date]).values[0,:]
-        if self.compounding_freq == secdb.constants.CONTINUOUS_COMPOUNDING:
+        if self.compounding_freq == pyfintools.constants.CONTINUOUS_COMPOUNDING:
             discounted_vals = cashflows * np.exp(-zero_rates * n_years_to_cashflows)
         elif isinstance(self.compounding_freq, int):
             discounted_vals = cashflows / np.power(1 + zero_rates / self.compounding_freq, 
@@ -1887,7 +1887,7 @@ class YieldCurve(InterestRate):
         return discounted_vals
 
     @classmethod
-    def from_dataframe(cls, yield_ts, tenor_in_years, rate_type, compounding_freq=secdb.constants.CONTINUOUS_COMPOUNDING, 
+    def from_dataframe(cls, yield_ts, tenor_in_years, rate_type, compounding_freq=pyfintools.constants.CONTINUOUS_COMPOUNDING, 
                        risk_currency='', denominated_currency=''):
         """ Create a YieldCurve object by providing the time series DataFrame and some required meta data. 
         
@@ -1973,7 +1973,7 @@ class MonthlyYieldCurve(YieldCurve):
                 pricing_dates: the dates on which to obtain yields
         """
         
-        if secdb.tools.utils.is_numeric(target_tenors):
+        if pyfintools.tools.utils.is_numeric(target_tenors):
             target_tenors = np.array([target_tenors], dtype=float)
         else:
             target_tenors = np.array(target_tenors, dtype=float)
@@ -2044,7 +2044,7 @@ def from_metadata(ts, meta):
             ts: (DataFrame) a pandas DataFrame containing time series data
             meta: (DataFrame) a pandas DataFrame containing meta data about the time series.
     """
-    class_name = secdb.security.helper.get_security_panel_name(cat_1_codes=meta.loc['category_1_code'], 
+    class_name = pyfintools.security.helper.get_security_panel_name(cat_1_codes=meta.loc['category_1_code'], 
                                                                cat_2_codes=meta.loc['category_2_code'],
                                                                default_class_name='TimeSeries')
     class_handle = eval(class_name)

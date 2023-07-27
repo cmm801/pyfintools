@@ -13,13 +13,13 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 sns.set()
 
-import secdb.tools.fts
-import secdb.tools.sim
+import pyfintools.tools.fts
+import pyfintools.tools.sim
 
 
 # Specify default simulation methods for factors, idiosyncratic noise, and the risk-free rate
-DEFAULT_FACTOR_SIM_TYPE = secdb.tools.sim.BOOTSTRAP_STATIONARY
-DEFAULT_IDIO_SIM_TYPE = secdb.tools.sim.LOGNORMAL
+DEFAULT_FACTOR_SIM_TYPE = pyfintools.tools.sim.BOOTSTRAP_STATIONARY
+DEFAULT_IDIO_SIM_TYPE = pyfintools.tools.sim.LOGNORMAL
 DEFAULT_RFR_SIM_TYPE = None
 
 # For parametric simulations, this is the default volatility for the risk-free rate
@@ -316,9 +316,9 @@ class FactorModel(BaseFactorModel):
     
     def _sim_factors(self, n_steps, n_paths, n_periods_per_year):
         sim_params = dict(n_steps=n_steps, n_paths=n_paths, n_periods_per_year=n_periods_per_year)
-        if secdb.tools.sim.LOGNORMAL == self.factor_sim_type:
+        if pyfintools.tools.sim.LOGNORMAL == self.factor_sim_type:
             return self._sim_factors_lognormal(**sim_params)
-        elif self.factor_sim_type in [secdb.tools.sim.BOOTSTRAP_MOVING, secdb.tools.sim.BOOTSTRAP_STATIONARY]:
+        elif self.factor_sim_type in [pyfintools.tools.sim.BOOTSTRAP_MOVING, pyfintools.tools.sim.BOOTSTRAP_STATIONARY]:
             return self._sim_factors_block_bootstrap(**sim_params)
         else:
             raise ValueError('Unsupported simulation method for factors: {}'.format(self.factor_sim_type))
@@ -326,34 +326,34 @@ class FactorModel(BaseFactorModel):
     def _sim_factors_lognormal(self, n_steps, n_paths, n_periods_per_year):
         prd_fac_rtns = self.factor_exp_exc_rtns / n_periods_per_year
         prd_fac_cov = self.factor_cov / n_periods_per_year
-        return secdb.tools.sim.simulate_lognormal((n_steps, n_paths), mean=prd_fac_rtns,
+        return pyfintools.tools.sim.simulate_lognormal((n_steps, n_paths), mean=prd_fac_rtns,
                                                cov=prd_fac_cov, rand_state=self._rand_state)
     
     def _sim_factors_block_bootstrap(self, n_steps, n_paths, n_periods_per_year, sim_type=None):
         assert isinstance(self.factor_rtns_ts, (pd.DataFrame, pd.Series)), \
                              'The factor time series are not defined, and are required for bootstrap simulations.'
-        sim_rtns = secdb.tools.sim.simulate_block_bootstrap((n_steps, n_paths), 
+        sim_rtns = pyfintools.tools.sim.simulate_block_bootstrap((n_steps, n_paths), 
                                                             time_series=self.factor_rtns_ts, 
                                                             block_size=self.sim_block_size,
                                                             demean=True,
                                                             rand_state=self._rand_state, 
-                                                            sim_type=secdb.tools.sim.BOOTSTRAP_STATIONARY)
+                                                            sim_type=pyfintools.tools.sim.BOOTSTRAP_STATIONARY)
         return sim_rtns + self.factor_expected_rtns / n_periods_per_year
     
     def _sim_factors_stationary_block_bootstrap(self, n_steps, n_paths, n_periods_per_year):
         assert isinstance(self.factor_rtns_ts, (pd.DataFrame, pd.Series)), \
                              'The factor time series are not defined, and are required for bootstrap simulations.'
-        sim_rtns = secdb.tools.sim.simulate_block_bootstrap((n_steps, n_paths), 
+        sim_rtns = pyfintools.tools.sim.simulate_block_bootstrap((n_steps, n_paths), 
                                                             time_series=self.factor_rtns_ts, 
                                                             block_size=self.sim_block_size,
                                                             demean=True,
                                                             rand_state=self._rand_state, 
-                                                            sim_type=secdb.tools.sim.BOOTSTRAP_STATIONARY)
+                                                            sim_type=pyfintools.tools.sim.BOOTSTRAP_STATIONARY)
         return sim_rtns + self.factor_expected_rtns / n_periods_per_year        
     
     def _sim_asset_idio_noise(self, n_steps, n_paths, n_periods_per_year):
         sim_params = dict(n_steps=n_steps, n_paths=n_paths, n_periods_per_year=n_periods_per_year)
-        if secdb.tools.sim.LOGNORMAL == self.idio_sim_type:
+        if pyfintools.tools.sim.LOGNORMAL == self.idio_sim_type:
             return self._sim_asset_idio_noise_lognormal(**sim_params)
         else:
             raise ValueError('Unsupported simulation method for asset idiosyncratic noise: {}'.format(self.idio_sim_type))
@@ -361,14 +361,14 @@ class FactorModel(BaseFactorModel):
     def _sim_asset_idio_noise_lognormal(self, n_steps, n_paths, n_periods_per_year):
         prd_idio_rtns = np.zeros_like(self.asset_idio_vols, dtype=float)
         prd_idio_cov = np.diag(self.asset_idio_vols ** 2) / n_periods_per_year
-        return secdb.tools.sim.simulate_lognormal(size=(n_steps, n_paths), 
+        return pyfintools.tools.sim.simulate_lognormal(size=(n_steps, n_paths), 
                                                   mean=prd_idio_rtns,
                                                   cov=prd_idio_cov, 
                                                   rand_state=self._rand_state)
     
     def _sim_asset_risk_free_rate(self, n_steps, n_paths, n_periods_per_year):
         sim_params = dict(n_steps=n_steps, n_paths=n_paths, n_periods_per_year=n_periods_per_year)
-        if secdb.tools.sim.LOGNORMAL == self.idio_sim_type:
+        if pyfintools.tools.sim.LOGNORMAL == self.idio_sim_type:
             return self._sim_asset_risk_free_rate_lognormal(**sim_params)
         else:
             raise ValueError('Unsupported simulation method for risk-free rates: {}'.format(self.rfr_sim_type))
@@ -376,7 +376,7 @@ class FactorModel(BaseFactorModel):
     def _sim_asset_risk_free_rate_lognormal(self, n_steps, n_paths, n_periods_per_year):
         prd_rfr_mean = np.array([self.risk_free_rate / n_periods_per_year])
         prd_rfr_cov = np.array([[self.risk_free_rate_vol ** 2 / n_periods_per_year]])
-        return secdb.tools.sim.simulate_lognormal(size=(n_steps, n_paths), 
+        return pyfintools.tools.sim.simulate_lognormal(size=(n_steps, n_paths), 
                                                   mean=prd_rfr_mean,
                                                   cov=prd_rfr_cov, 
                                                   rand_state=self._rand_state)
@@ -440,7 +440,7 @@ def estimate_asset_betas(factor_rtns, asset_exc_rtns, adj_for_acor=False, data_f
     betas = []
     idio_std = []
     if isinstance(factor_rtns, (pd.Series, pd.DataFrame)):
-        data_frequency = secdb.tools.freq.infer_freq(asset_exc_rtns.index, allow_missing=True)        
+        data_frequency = pyfintools.tools.freq.infer_freq(asset_exc_rtns.index, allow_missing=True)        
         factor_rtns_df, asset_exc_rtns_df = factor_rtns.align(asset_exc_rtns, axis=0, join='inner')
 
         factor_rtns = factor_rtns_df.to_numpy()
@@ -449,7 +449,7 @@ def estimate_asset_betas(factor_rtns, asset_exc_rtns, adj_for_acor=False, data_f
         raise ValueError('"data_frequency" must be specified when the factor/asset returns are numpy arrays.')
     
     # Get the rescaling factor for the idiosyncratic volatility
-    periods_per_year = secdb.tools.freq.get_periods_per_year(data_frequency)
+    periods_per_year = pyfintools.tools.freq.get_periods_per_year(data_frequency)
 
     # Loop through all of the asset time series and calculate the betas
     for j in range(asset_exc_rtns.shape[1]):
@@ -508,7 +508,7 @@ def adjust_betas_for_autocorrelation(factor_rtns, asset_exc_rtns, asset_betas, d
     # 1) Find the residual of the regression and unsmooth it
     asset_exc_rtns_hat = factor_rtns @ asset_betas.T    
     residual = asset_exc_rtns - asset_exc_rtns_hat
-    unsmth_resid = secdb.tools.stats.geltner_unsmooth(residual, skipna=True)
+    unsmth_resid = pyfintools.tools.stats.geltner_unsmooth(residual, skipna=True)
 
     # 2) Calculate the asset betas of the unsmoothed residuals
     resid_asset_betas, _ = estimate_asset_betas(factor_rtns, unsmth_resid, data_frequency=data_frequency)
@@ -539,7 +539,7 @@ def estimate_return_uncertainties(factor_rtns, asset_exc_rtns, n_sims=100, seed=
     factor_panel, asset_vals = _format_factor_and_asset_returns(factor_rtns, asset_exc_rtns)
     
     # Get the data frequency of the factor and asset time series
-    data_frequency = secdb.tools.freq.infer_freq(asset_exc_rtns.index, allow_missing=True)
+    data_frequency = pyfintools.tools.freq.infer_freq(asset_exc_rtns.index, allow_missing=True)
         
     # Align the columns so the series with the most history are on the left
     asset_panel, idx_revert = _order_columns_by_first_nan(asset_vals)
@@ -641,7 +641,7 @@ def _get_n_periods_per_year(freq, rfr_rtns_ts):
         else:
             n_periods_per_year = rfr_rtns_ts.fts.n_periods_per_year
     elif freq is not None:
-        n_periods_per_year = secdb.tools.fts.get_periods_per_year(freq)
+        n_periods_per_year = pyfintools.tools.fts.get_periods_per_year(freq)
     else:
         raise ValueError('The frequency argument must be used if the inputs are pandas arrays.')
     return n_periods_per_year, freq

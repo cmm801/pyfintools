@@ -5,7 +5,7 @@ import numpy as np
 import os
 import pandas as pd
 
-import secdb.constants
+import pyfintools.constants
 
 
 CBOE_VIX_FUTURES_FIRST_DATE = '2013-01-01'  # First date that CBOE has historical futures data
@@ -17,7 +17,7 @@ def get_security_meta_data(series_type):
         Arguments:
             series_type: (str) the code used for the .csv file containing the data.
         """
-    filename = os.path.join(secdb.constants.DATA_PATH, \
+    filename = os.path.join(pyfintools.constants.DATA_PATH, \
                         f'meta_data/sec_info/{series_type.upper()}.csv')
     df = pd.read_csv(filename)
     return df

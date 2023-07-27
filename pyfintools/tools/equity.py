@@ -6,7 +6,7 @@ import numpy as np
 import copy
 import scipy.optimize
 
-import secdb.tools.utils
+import pyfintools.tools.utils
 
 
 class ImpliedERP(object):
@@ -63,7 +63,7 @@ class ImpliedERP(object):
     
     @years_in_period_1.setter
     def years_in_period_1(self, n_years):
-        if not secdb.tools.utils.is_integer(n_years):
+        if not pyfintools.tools.utils.is_integer(n_years):
             raise ValueError('The number of years in period 1 must be an integer value')
         else:
             self._years_in_period_1 = n_years
