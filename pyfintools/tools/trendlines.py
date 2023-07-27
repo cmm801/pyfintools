@@ -5,156 +5,14 @@ import numpy as np
 import pandas as pd
 import heapq
 
-import pyfintools.tools.freq
-import pyfintools.tools.plot
+import matplotlib.pyplot as plt
 
-
-# Column names that can appear in the time series
-COL_OPEN = 'open'
-COL_CLOSE = 'close'
-COL_HIGH = 'high'
-COL_LOW = 'low'
-COL_VOLUME = 'volume'
-
-# Column used just for futures/options
-COL_OPEN_INTEREST = 'open_interest'
-
-# Extra columns provided by IB
-COL_AVERAGE = 'average'
-COL_BAR_COUNT = 'bar_count'
-
-# All columns used by a non-derivative asset
-COL_CORE = (COL_OPEN, COL_CLOSE, COL_HIGH, COL_LOW, COL_VOLUME,)
-
-# All columns used by futures/options
-COL_DER = COL_CORE + (COL_OPEN_INTEREST,)
-
-# Optional columns that can be included
-COL_OPTIONAL = (COL_AVERAGE, COL_BAR_COUNT,)
 
 DEFAULT_ABS_TOL = 1e-6
 DEFAULT_REL_TOL = 1e-6
 
 # Default minimum distance between what we count as 'distinct' lines
 DEFAULT_LINE_SEPARATION = 10
-
-
-class OHLC:
-    def __init__(self, ts, exchange=None):
-        self._timeseries = None
-        self.timeseries = ts.copy().sort_index()
-        self.exchange = exchange
-        
-    @property
-    def timeseries(self):
-        return self._timeseries
-    
-    @timeseries.setter
-    def timeseries(self, ts):
-        self._timeseries = self._format_input_timeseries(ts)
-        self.frequency = self._calc_frequency(ts)
-        
-    @property
-    def open(self):
-        return self.timeseries.open
-        
-    @property
-    def close(self):
-        return self.timeseries.close
-        
-    @property
-    def high(self):
-        return self.timeseries.high
-        
-    @property
-    def low(self):
-        return self.timeseries.low
-        
-    @property
-    def volume(self):
-        return self.timeseries.volume
-        
-    @property
-    def open_interest(self):
-        return self.timeseries.open_interest
-        
-    @property
-    def average(self):
-        return self.timeseries.average
-
-    @property
-    def bar_count(self):
-        return self.timeseries.bar_count
-
-    @property
-    def index(self):
-        """ Returns index of underlying timeseries DataFrame. """
-        return self.timeseries.index
-
-    @property
-    def values(self):
-        """ Returns values of underlying timeseries DataFrame. """
-        return self.timeseries.values
-
-    @property
-    def columns(self):
-        """ Returns columns of underlying timeseries DataFrame. """
-        return self.timeseries.columns
-
-    @property
-    def size(self):
-        """ Returns size of underlying timeseries DataFrame. """
-        return self.timeseries.size
-
-    @property
-    def shape(self):
-        """ Returns shape of underlying timeseries DataFrame. """
-        return self.timeseries.shape
-
-    def _format_input_timeseries(self, ts):
-        """ Method for putting an input time series into the standard format.
-        """
-        if not isinstance(ts.index, pd.DatetimeIndex):
-            raise ValueError('The timeseries index must be a pandas DatetimeIndex.')
-
-        unknown = set(ts.columns) - set(COL_DER + COL_OPTIONAL)
-        if unknown:
-            raise ValueError('Unknown columns: {}'.format(unknown))
-
-        missing = set(COL_CORE) - set(ts.columns)
-        if missing:
-            raise ValueError('Missing columns: {}'.format(missing))
-
-        # Save the time series data
-        return ts
-
-    def _calc_frequency(self, ts):
-        """ Method for obtaining the frequency of a time series.
-        """
-        return pyfintools.tools.freq.infer_freq(ts.index, allow_missing=True)
-
-    def head(self, N):
-        """ Get an OHLC object with just the first N rows of time series data. """
-        return OHLC(self.timeseries.head(N), exchange=self.exchange)
-
-    def tail(self, N):
-        """ Get an OHLC object with just the last N rows of time series data. """
-        return OHLC(self.timeseries.tail(N), exchange=self.exchange)
-
-    def ffill(self):
-        """ Method to fill missing data points with previous values. """
-        raise NotImplementedError('Need to implement method.')
-
-    def plot_candlestick(self, include_volume=False):
-        if not include_volume:
-            pyfintools.tools.plot.plot_candlestick(self.timeseries, 
-                            open_col=COL_OPEN, high_col=COL_HIGH, 
-                            low_col=COL_LOW, close_col=COL_CLOSE, time_col=None)
-        else:
-            pyfintools.tools.plot.plot_candlestick_volume(self.timeseries, 
-                            open_col=COL_OPEN, high_col=COL_HIGH, low_col=COL_LOW, 
-                            close_col=COL_CLOSE, vol_col=COL_VOLUME, time_col=None)
-
 
 class Line:
     def __init__(self, point, timedelta=1, slope=None, point2=None):
@@ -239,7 +97,6 @@ class TrendlineHelper:
     @ohlc.setter
     def ohlc(self, ts):        
         self._ohlc = ts
-        self.timestamps = np.array([d.timestamp() for d in ts.index])
 
         # Reset some calculated variables
         self._expanding_min = None
@@ -371,7 +228,7 @@ class TrendlineHelper:
         # Precalculate some helpful values
         y_R = ts.values[-1]
         idx_R = np.where(x_R == ts.index)[0][0]
-        dx_vals = self.timestamps[idx_R] - self.timestamps[:idx_R+1]
+        dx_vals = self.ohlc.timestamps[idx_R] - self.ohlc.timestamps[:idx_R+1]
         dy_vals = ts.values[idx_R] - ts.values
 
         # Initialize variable for the slope of the bounding line
@@ -412,7 +269,7 @@ class TrendlineHelper:
                     x_L_vals.append(x_L)
                     y_R_vals.append(y_R)            
                     y_L_vals.append(y_L)
-                    tstmps.append(self.timestamps[idx_L])
+                    tstmps.append(self.ohlc.timestamps[idx_L])
                     
                     intercept = y_R - slope * dx_vals[0]
                     intercept_vals.append(intercept)
@@ -502,8 +359,8 @@ class TrendlineHelper:
 
 
 class FeatureHelper:
-    def __init__(self, helper):
-        self.helper = helper
+    def __init__(self, ohlc_obj):
+        self.ohlc_obj = ohlc_obj
 
     def calculate_features(self, lines, x_obs, width_nbrhood, width_tangent, max_intersections=1):
         """ Compute line features for trend lines at a single point.
@@ -526,16 +383,16 @@ class FeatureHelper:
         lines = lines.loc[lines.x_R <= x_obs]
 
         if direction == 1:
-            y_obs = self.helper.ohlc.high[x_obs]
-            sub_ts = self.helper.ohlc.high[:x_obs]
+            y_obs = self.ohlc_obj.high[x_obs]
+            sub_ts = self.ohlc_obj.high[:x_obs]
         elif direction == -1:
-            y_obs = self.helper.ohlc.low[x_obs]
-            sub_ts = self.helper.ohlc.low[:x_obs]
+            y_obs = self.ohlc_obj.low[x_obs]
+            sub_ts = self.ohlc_obj.low[:x_obs]
         else:
             raise ValueError('Direction must be either +1 or -1.')
 
         idx_obs = np.where(x_obs == sub_ts.index)[0][0]
-        timestamps = self.helper.timestamps[:idx_obs+1]
+        timestamps = self.ohlc_obj.timestamps[:idx_obs+1]
         t_obs = timestamps[idx_obs]
 
         T = lines.shape[0]
@@ -550,8 +407,8 @@ class FeatureHelper:
         for idx_line in range(lines.shape[0]):
             s = lines.iloc[idx_line]
             L = Line(slope=s.slope, point=(timestamps[0], s.y_0), timedelta=1)
-            if (direction == 1 and L.get_y_vals(t_obs) < y_obs - self.helper.atol) \
-                    or (direction == -1 and L.get_y_vals(t_obs) > y_obs + self.helper.atol):
+            if (direction == 1 and L.get_y_vals(t_obs) < y_obs - self.ohlc_obj.atol) \
+                    or (direction == -1 and L.get_y_vals(t_obs) > y_obs + self.ohlc_obj.atol):
                 # This line has been exceeded at the observation point
                 start_dates[idx_line] = x_obs
                 flipped[idx_line] = True
@@ -643,13 +500,13 @@ class FeatureHelper:
         fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 5 * n_rows))
         axes = axes.flatten()
 
-        date_index = pd.DatetimeIndex(self.helper.ohlc.index)
+        date_index = pd.DatetimeIndex(self.ohlc_obj.index)
 
         # Get the underlying time series
         if direction == 1:
-            underlier_ts = self.helper.ohlc.high
+            underlier_ts = self.ohlc_obj.high
         else:
-            underlier_ts = self.helper.ohlc.low
+            underlier_ts = self.ohlc_obj.low
 
         if xlim_R is not None:
             y_min = underlier_ts[:xlim_R].min()
@@ -684,12 +541,12 @@ class FeatureHelper:
                         underlier_ts.plot(ax=ax, color='blue')
                         ax.set_ylim(y_min - 0.2 * dY, y_max + 0.2 * dY)
                         if xlim_R is not None:
-                            ax.set_xlim(self.helper.ohlc.index[0], xlim_R)
+                            ax.set_xlim(self.ohlc_obj.index[0], xlim_R)
 
                 ctr += 1
 
 
-def calculate_prominence(helper, x_obs, y, step_size, atol=None):
+def calculate_prominence(ohlc_obj, x_obs, y, step_size, atol=None):
     """ Get the biggest prominence of the line
         This is defined to be the maximum of the minimal separation on the left/right
         for any relative maximum or minimum when the prices enter the region.
@@ -697,19 +554,19 @@ def calculate_prominence(helper, x_obs, y, step_size, atol=None):
     if atol is None:
         atol = DEFAULT_ABS_TOL
     
-    idx_obs = np.where(helper.ohlc.index == x_obs)[0][0]
+    idx_obs = np.where(ohlc_obj.index == x_obs)[0][0]
 
-    idx_region_below = helper.ohlc.high.values[:idx_obs+1] < y - step_size - atol
-    idx_region_above = helper.ohlc.low.values[:idx_obs+1] > y + step_size + atol
+    idx_region_below = ohlc_obj.high.values[:idx_obs+1] < y - step_size - atol
+    idx_region_above = ohlc_obj.low.values[:idx_obs+1] > y + step_size + atol
 
     idx_regions = np.zeros((idx_obs+1,), dtype=int)
     idx_regions[idx_region_above] = 1
     idx_regions[idx_region_below] = -1
 
-    idx_region_boundary = np.hstack([True, idx_regions[1:] != idx_regions[:-1]])
-    timestamps = np.hstack([helper.timestamps[:idx_obs+1][idx_region_boundary], 
-                            helper.timestamps[idx_obs+1]])
-    region_lengths = timestamps[1:] - timestamps[:-1]
+    idx_region_boundary = np.hstack([idx_regions[1:] != idx_regions[:-1], True])
+    timestamps = ohlc_obj.timestamps[:idx_obs+1][idx_region_boundary]
+    region_lengths = np.hstack([timestamps[0] - ohlc_obj.timestamps[0] + 1,
+                                timestamps[1:] - timestamps[:-1]])
     region_values = idx_regions[idx_region_boundary]
     region_values, timestamps
 
@@ -740,13 +597,13 @@ def calculate_prominence(helper, x_obs, y, step_size, atol=None):
     
     return prominence
 
-def get_line_region_classification(helper, idx_obs, y, band_width, atol=None):
+def get_line_region_classification(ohlc_obj, idx_obs, y, band_width, atol=None):
     """Determine if the prices are in the region near the line. """
     if atol is None:
         atol = DEFAULT_ABS_TOL
 
-    mask_below_inner_region = helper.ohlc.high.values[:idx_obs+1] < y - band_width - atol
-    mask_above_inner_region = helper.ohlc.low.values[:idx_obs+1] > y + band_width + atol
+    mask_below_inner_region = ohlc_obj.high.values[:idx_obs+1] < y - band_width - atol
+    mask_above_inner_region = ohlc_obj.low.values[:idx_obs+1] > y + band_width + atol
     mask_in_inner_region = ~mask_below_inner_region & ~mask_above_inner_region
     
     # Create array of -1, 0, +1 to indicate if prices are below, in, or above the line neighborhood
@@ -755,7 +612,7 @@ def get_line_region_classification(helper, idx_obs, y, band_width, atol=None):
     all_line_class[mask_above_inner_region] = +1
     return all_line_class
 
-def find_right_boundaries(helper, x_obs, y, band_width, min_time_for_breach=10, atol=None):
+def find_right_boundaries(ohlc_obj, x_obs, y, band_width, min_time_for_breach=10, atol=None):
     """ Find the index of the boundaries separating regions where prices are above/below the line.
     
         Returns a tuple (idx_right_boundaries, bounding_direction)
@@ -764,7 +621,7 @@ def find_right_boundaries(helper, x_obs, y, band_width, min_time_for_breach=10, 
                 are above/below the line
 
         Arguments:
-            helper: (TrendlineHelper) object that contains the time series info
+            ohlc_obj: (OHLC) object that contains the time series info
             x_obs: (Timestamp) the observation date/time
             y: (float) the level of the horizontal line for which features are to be calculated
             band_width: (float) the price is defined to be in the neighborhood of 'y' if
@@ -776,11 +633,11 @@ def find_right_boundaries(helper, x_obs, y, band_width, min_time_for_breach=10, 
         atol = DEFAULT_ABS_TOL
 
     # Get the index of the observation point
-    idx_obs = np.where(helper.ohlc.index == x_obs)[0][0]
+    idx_obs = np.where(ohlc_obj.index == x_obs)[0][0]
     index = np.arange(0, idx_obs + 1)
 
     # Determine if the prices are in the region near the line
-    all_line_class = get_line_region_classification(helper, 
+    all_line_class = get_line_region_classification(ohlc_obj, 
             idx_obs=idx_obs, y=y, band_width=band_width, atol=atol)
     
     idx_outside_inner_region = index[all_line_class != 0]
@@ -806,7 +663,7 @@ def find_right_boundaries(helper, x_obs, y, band_width, min_time_for_breach=10, 
     bounding_direction = all_line_class[idx_right_boundaries]
     return idx_right_boundaries, bounding_direction
 
-def calculate_features_for_horizontal_line(helper, x_obs, y, band_width,
+def calculate_features_for_horizontal_line(ohlc_obj, x_obs, y, band_width,
                                            max_intersections=4, 
                                            min_time_for_breach=10,
                                            atol=None):
@@ -833,7 +690,7 @@ def calculate_features_for_horizontal_line(helper, x_obs, y, band_width,
         Returns a dict of calculated features.
 
         Arguments:
-            helper: (TrendlineHelper) object that contains the time series info
+            ohlc_obj: (OHLC) object that contains the time series info
             x_obs: (Timestamp) the observation date/time
             y: (float) the level of the horizontal line for which features are to be calculated
             band_width: (float) the price is defined to be in the neighborhood of 'y' if
@@ -847,13 +704,14 @@ def calculate_features_for_horizontal_line(helper, x_obs, y, band_width,
     if atol is None:
         atol = DEFAULT_ABS_TOL
 
-    idx_right_boundaries, bounding_direction = find_right_boundaries(helper, x_obs=x_obs, y=y, 
+    idx_right_boundaries, bounding_direction = find_right_boundaries(ohlc_obj, x_obs=x_obs, y=y, 
                      band_width=band_width, min_time_for_breach=min_time_for_breach, atol=atol)
 
-    idx_obs = np.where(helper.ohlc.index == x_obs)[0][0]
-    low_vals = helper.ohlc.low.values[:idx_obs+1]    
-    high_vals = helper.ohlc.high.values[:idx_obs+1]
-
+    idx_obs = np.where(ohlc_obj.index == x_obs)[0][0]
+    low_vals = ohlc_obj.low.values[:idx_obs+1]    
+    high_vals = ohlc_obj.high.values[:idx_obs+1]
+    index = np.arange(idx_obs+1)
+    
     # Only keep boundaries between regions with prices above or below line
     idx_right_boundaries = idx_right_boundaries[bounding_direction != 0]
     bounding_direction = bounding_direction[bounding_direction != 0]
@@ -880,7 +738,7 @@ def calculate_features_for_horizontal_line(helper, x_obs, y, band_width,
     idx_left_major_boundaries = np.hstack([0, 1 + idx_intersections])
 
     # Determine if the prices are in the region near the line
-    all_line_class = get_line_region_classification(helper, 
+    all_line_class = get_line_region_classification(ohlc_obj, 
             idx_obs=idx_obs, y=y, band_width=band_width, atol=atol)
 
     # Go through the intersection points in reverse order, starting at x_obs
@@ -904,8 +762,8 @@ def calculate_features_for_horizontal_line(helper, x_obs, y, band_width,
         n_deflections[j] = mask_bdry.sum()
         directions[j] = regional_directions[-j-1]
         durations[j] = idx_right - idx_left + 1
-        x_left[j] = helper.ohlc.index[idx_left]
-        x_right[j] = helper.ohlc.index[idx_right]
+        x_left[j] = ohlc_obj.index[idx_left]
+        x_right[j] = ohlc_obj.index[idx_right]
 
         # Find the number of points in the neighborhood of the line btwn left/right boundaries
         mask_full = (idx_left < idx_right_boundaries) & (idx_right_boundaries < idx_right)
@@ -929,11 +787,12 @@ def calculate_features_for_horizontal_line(helper, x_obs, y, band_width,
         j += 1
 
     # Find the maximum prominence of the line
-    prominence = calculate_prominence(helper, x_obs=x_obs, y=y, step_size=band_width)
+    prominence = calculate_prominence(ohlc_obj, x_obs=x_obs, y=y,
+                                      step_size=band_width)
 
     # Create a dict for outputting the results
     results = dict(slope=0.0, 
-                   x_0=helper.ohlc.index[0], y_0=y,
+                   x_0=ohlc_obj.index[0], y_0=y,
                    x_R=x_obs, y_R=y, 
                    prominence=prominence,
                    directions=directions,
@@ -949,7 +808,7 @@ def calculate_features_for_horizontal_line(helper, x_obs, y, band_width,
 
     return results
 
-def find_all_support_and_resistence_lines(helper, x_obs, step_size, band_width,
+def find_all_support_and_resistence_lines(ohlc_obj, x_obs, step_size, band_width,
                                           min_time_for_breach=10,
                                           max_intersections=4, atol=None):
     """ Find all lines of support/resistance at a given observation point x_obs.
@@ -957,7 +816,7 @@ def find_all_support_and_resistence_lines(helper, x_obs, step_size, band_width,
         Returns a pandas DataFrame of results
         
         Arguments:
-            helper: (TrendlineHelper) object that contains the time series info
+            ohlc_obj: (OHLC) object that contains the time series info
             x_obs: (Timestamp) the observation date/time
             step_size: (float) how large of steps to take when looping through the
                 set of horizontal lines.
@@ -970,16 +829,16 @@ def find_all_support_and_resistence_lines(helper, x_obs, step_size, band_width,
             atol: (float) the absolute tolerance for floating point operations/comparisons
     """
     # Get the index of the observation point
-    idx_obs = np.where(helper.ohlc.index == x_obs)[0][0]
+    idx_obs = np.where(ohlc_obj.index == x_obs)[0][0]
 
     # Get the max and min y-values during the observation period
-    y_min = helper.ohlc.low.values[:idx_obs+1].min()
-    y_max = helper.ohlc.high.values[:idx_obs+1].max()
+    y_min = ohlc_obj.low.values[:idx_obs+1].min()
+    y_max = ohlc_obj.high.values[:idx_obs+1].max()
 
     # Loop through all y-values to test if they are a support/resistance line
     hlines = []
     for y in np.arange(y_min, y_max + step_size, step_size):        
-        results = calculate_features_for_horizontal_line(helper, x_obs=x_obs, y=y,
+        results = calculate_features_for_horizontal_line(ohlc_obj, x_obs=x_obs, y=y,
                                                          band_width=band_width,
                                                          max_intersections=max_intersections, 
                                                          min_time_for_breach=min_time_for_breach,
@@ -991,19 +850,21 @@ def find_all_support_and_resistence_lines(helper, x_obs, step_size, band_width,
     df_hlines = pd.DataFrame.from_dict(hlines)
     return df_hlines
 
-def calculate_line_feature_score(helper, df_features, x_obs, max_intersections):
+def calculate_line_feature_score(ohlc_obj, df_features, x_obs, max_intersections):
     """ Calculate a score for a support/resistance line based on features.
     """
-    T = (x_obs - helper.ohlc.index[0]) / pd.Timedelta(seconds=1)
+    T = (x_obs - ohlc_obj.index[0]) / pd.Timedelta(seconds=1)
 
     scores = []
     x_scores = []
+    all_scores = []
     for j in range(df_features.shape[0]):
         row = df_features.iloc[j]
         max_score = -1
-        max_score_x = helper.ohlc.index[0]
+        max_score_x = ohlc_obj.index[0]
+        score_info = dict()
         for k in range(1, max_intersections + 1):
-            if row.n_neighbors[k-1] > -1 and row.directions[k-1] != 0:       
+            if row.n_neighbors[k-1] > -1 and row.directions[k-1] != 0:
                 n_deflections = row.n_deflections[:k]            
                 n_neighbors = row.n_neighbors[:k]
                 n_violations = row.n_violations[:k]
@@ -1011,19 +872,25 @@ def calculate_line_feature_score(helper, df_features, x_obs, max_intersections):
                 violations_sum_2 = row.violations_sum_2[:k]            
                 durations = row.durations[:k]
 
-                value = np.sqrt(durations/T) \
-                        * (1 + n_deflections / T) \
-                        / (1 + 2 * violations_sum_2) \
-                        * (1 + n_neighbors)       
-                score = np.power(np.product(value), 1/k)
+                score_duration = durations/T
+                score_deflection = 1e4 * (1 + n_deflections) / T
+                score_violations = 100 / np.power(1 + violations_sum_2 / (1 + n_neighbors), 4)
+                score_neighbors = 100 * (1 + n_neighbors) / T
+                total = score_duration * score_deflection * score_violations * score_neighbors
+                score = np.max(total)
                 if score > max_score:
                     max_score = score
-                    max_score_x = row.x_left[k-1]
+                    idx_max = np.argmax(total)
+                    max_score_x = row.x_left[idx_max]
+                    score_info = dict(duration=score_duration[idx_max], deflection=score_deflection[idx_max],
+                                      violations=score_violations[idx_max], neighbors=score_neighbors[idx_max])
 
         scores.append(max_score)
         x_scores.append(max_score_x)
+        all_scores.append(score_info)
 
     df = df_features.copy()
     df['score'] = scores
     df['score_x'] = x_scores
+    df['score_info'] = all_scores
     return df
