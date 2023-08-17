@@ -81,8 +81,8 @@ def get_historical_ib_data(ticker, frequency, start, end, data_type, fill_missin
     df.drop_duplicates(inplace=True)
 
     # Remove extra whitespace in the date
-    df.date = [re.sub('\s+',' ', d) for d in df.date.values]
-    
+    df.date = [re.sub(r'\s+',' ', d) for d in df.date.values]
+
     if fill_missing:
         # Add rows for all missing observations
         idx_start = df.index.values[0]
@@ -91,7 +91,7 @@ def get_historical_ib_data(ticker, frequency, start, end, data_type, fill_missin
         missing_indices = all_indices - set(df.index.values)
         empty_data = np.nan * np.zeros((len(missing_indices), df.shape[1]), dtype=np.float32)
         empty_df_index = pd.Index(missing_indices, name=df.index.name)
-        empty_df = pd.DataFrame(empty_data, index=empempty_df_index, columns=df.columns)
+        empty_df = pd.DataFrame(empty_data, index=empty_df_index, columns=df.columns)
         empty_df.volume = 0
         empty_df.barCount = 0
         empty_df.date = [_convert_timestamp_to_date(t) for t in empty_df.index.values]
@@ -106,20 +106,20 @@ def get_historical_ib_data(ticker, frequency, start, end, data_type, fill_missin
         df.loc[idx_missing, 'open'] = df.loc[idx_missing, 'close'].values
         df.loc[idx_missing, 'high'] = df.loc[idx_missing, 'close'].values
         df.loc[idx_missing, 'low'] = df.loc[idx_missing, 'close'].values
-        
     return df
 
 def create_volume_bars(input_df, bar_size, min_bar_size=0):
     """Create volume bars from a set of time bars.
-       NOTE: Following the TWS convention, the timestamp and date refer to the BEGINNING of each bar, not the end.
-       """    
+       NOTE: Following the TWS convention, the timestamp and date 
+            refer to the BEGINNING of each bar, not the end.
+       """
     # We need to add a single repeated row at the beginning of the DataFrame
     #   which will make the algorithm more simple
-    BARCOUNT_COL = 'barCount' if 'barCount' in input_df.columns else 'bar_count'
+    barcount_col = 'barCount' if 'barCount' in input_df.columns else 'bar_count'
 
     new_row = input_df.iloc[[0]].copy()
     new_row.loc[:,'volume'] = 0
-    new_row.loc[:,BARCOUNT_COL] = 0
+    new_row.loc[:,barcount_col] = 0
     new_date = input_df.index[0] - datetime.timedelta(seconds=1)
     new_row.loc[:,'index'] = new_date
     new_row.index.values[0] = input_df.index.values[0] - 1
@@ -139,17 +139,16 @@ def create_volume_bars(input_df, bar_size, min_bar_size=0):
         if (bar_vol_prev > min_bar_size and bar_vol_curr - bar_size > abs(bar_vol_prev - bar_size)) \
                     or (t == T and bar_vol_prev > 0):
             # Adding the next tick would make the bar too big, so we save the bar
-            vol_bars.append({'index' : df.index.values[t_start], 
+            vol_bars.append({'index' : df.index.values[t_start],
                              'volume' : bar_vol_prev,
                              'average' : vol_times_prc[t_start:t].sum() / bar_vol_prev,
-                             BARCOUNT_COL : df[BARCOUNT_COL].values[t_start:t].sum(),
+                             barcount_col : df[barcount_col].values[t_start:t].sum(),
                              'open' : df.open.values[t_start],
                              'high' : df.high.values[t_start:t].max(),
                              'low' : df.low.values[t_start:t].min(),
                              'close' : df.close.values[t-1]
                             })
             t_start = t
-            vol = 0
 
     output = pd.DataFrame(vol_bars)
     output.set_index('index', inplace=True)
@@ -173,7 +172,7 @@ def convert_tick_to_time_bars(input_df):
     ts = input_df.groupby(input_df.index.values).agg(agg_rules)
     ts.columns = ['open', 'high', 'low', 'close', 'volume', 'barCount', 'vol_price']
     ts['average'] = ts.vol_price / ts.volume
-    
+
     # Drop the extra column (volume * price) that was added for the calculation of VWAP
     ts.drop('vol_price', axis=1, inplace=True)
     input_df.drop('vol_price', axis=1, inplace=True)
@@ -201,36 +200,13 @@ def downsample(input_df, frequency, agg_rules=None):
 
     if 'volume' in input_df.columns:
         agg_rules['volume'] = 'sum'
-        
+
     if 'bar_count' in input_df.columns:
         agg_rules['bar_count'] = 'sum'
 
     if 'barCount' in input_df.columns:
         agg_rules['barCount'] = 'sum'
 
-<<<<<<< HEAD
-    # Add aggregation rule for 'average'/VWAP if it is in the columns
-    if 'average' in input_df.columns:
-        agg_rules['total_price_volume'] = 'sum'
-        input_df['total_price_volume'] = input_df.average * input_df.volume.values
-
-    ts = input_df.groupby(pd.Grouper(freq=frequency)).agg(agg_rules)
-
-    # Calculate the new average price / VWAP if the data is available
-    if 'average' in input_df.columns:
-        input_df.drop('total_price_volume', axis=1, inplace=True)
-        ts['average'] = ts.total_price_volume / ts.volume.values
-        ts.drop('total_price_volume', axis=1, inplace=True)
-
-    # Fill any missing observations with the prior closing price
-    idx_nan = np.isnan(ts.close.values)
-    ts.close.ffill(inplace=True)
-
-    fill_cols = ['open', 'high', 'low']        
-    if 'average' in input_df.columns:
-        fill_cols.append('average')        
-
-=======
     if 'adjusted_close' in input_df.columns:
         agg_rules['adjusted_close'] = 'last'
 
@@ -240,30 +216,37 @@ def downsample(input_df, frequency, agg_rules=None):
         input_df['total_price_volume'] = input_df.average * input_df.volume.values
 
     try:
-        ts = input_df.groupby(pd.Grouper(freq=frequency)).agg(agg_rules)
+        df_agg = input_df.groupby(pd.Grouper(freq=frequency)).agg(agg_rules)
     except TypeError:
         # If the dates are irregularly spaced, we get an error saying
         # the index must be a DatetimeIndex
         input_df.index = pd.DatetimeIndex(input_df.index)
-        ts = input_df.groupby(pd.Grouper(freq=frequency)).agg(agg_rules)
+        df_agg = input_df.groupby(pd.Grouper(freq=frequency)).agg(agg_rules)
 
     # Calculate the new average price / VWAP if the data is available
     if 'average' in input_df.columns:
         input_df.drop('total_price_volume', axis=1, inplace=True)
-        ts['average'] = ts.total_price_volume / ts.volume.values
-        ts.drop('total_price_volume', axis=1, inplace=True)
+        df_agg['average'] = df_agg.total_price_volume / df_agg.volume.values
+        df_agg.drop('total_price_volume', axis=1, inplace=True)
 
     # Fill any missing observations with the prior closing price
-    idx_nan = np.isnan(ts.close.values)
-    ts.close.ffill(inplace=True)
+    return _fill_missing_obs_with_close_price(df_agg)
 
-    fill_cols = ['open', 'high', 'low']        
-    if 'average' in input_df.columns:
-        fill_cols.append('average')        
+def _fill_missing_obs_with_close_price(df_agg):
+    """Fill the missing values in an OHLC dataframe with close price."""
+    if 'close' not in df_agg.columns:
+        raise ValueError('Expected column "close" not found.')
 
-    close_vals = np.tile(ts.close[idx_nan].values.reshape(-1, 1), (1, len(fill_cols)))
-    ts.loc[idx_nan, fill_cols] = close_vals
-    return ts
+    fill_cols = ['open', 'high', 'low']
+    if 'average' in df_agg.columns:
+        fill_cols.append('average')
+
+    idx_nan = np.isnan(df_agg.close.values)
+    df_agg.close.ffill(inplace=True)
+
+    close_vals = np.tile(df_agg.close[idx_nan].values.reshape(-1, 1), (1, len(fill_cols)))
+    df_agg.loc[idx_nan, fill_cols] = close_vals
+    return df_agg
 
 def set_timestamp_index(df):
     """ Set the index of the data frame to be the UTC timestamp.
@@ -274,19 +257,20 @@ def set_timestamp_index(df):
             utc_timestamps = [dt.timestamp() for dt in utc_datetimes]
             df.index = pd.Index(utc_timestamps, name='utc_timestamp')
         else:
-            df.set_index('utc_timestamp', inplace=True) 
-            
+            df.set_index('utc_timestamp', inplace=True)
+
 def add_missing_rows(_df, t_start, t_end):
     """Add missing rows between t_start and t_end to a data frame.
     """
     barcount_col = _get_barcount_col(_df)
 
     ind_vals = np.arange(t_start, t_end + 1)
-    N = ind_vals.size - _df.shape[0]
+    n_missing = ind_vals.size - _df.shape[0]
     missing_idx = set(ind_vals) - set(_df.index.values)
-    empty_df = pd.DataFrame(np.nan * np.zeros((N, _df.shape[1]), dtype=np.float32), columns=_df.columns)
+    empty_df = pd.DataFrame(np.nan * \
+        np.zeros((n_missing, _df.shape[1]), dtype=np.float32), columns=_df.columns)
     empty_df['volume'] = 0
-    
+
     if barcount_col is not None:
         empty_df['barCount'] = 0
 
@@ -294,7 +278,7 @@ def add_missing_rows(_df, t_start, t_end):
     full_df = pd.concat([_df, empty_df]).sort_index().ffill()
     return full_df
 
-def _get_barcount_col(df):        
+def _get_barcount_col(df):
     """ Find a bar-count columns. """
     barcount_col = None
     if 'bar_count' in df.columns:
@@ -302,5 +286,3 @@ def _get_barcount_col(df):
     elif 'barCount' in df.columns:
         barcount_col = 'barCount'
     return barcount_col
-
-    
